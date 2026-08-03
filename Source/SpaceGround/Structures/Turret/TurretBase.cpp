@@ -9,7 +9,6 @@ ATurretBase::ATurretBase()
 {
 	PrimaryActorTick.bCanEverTick = true;
 
-
 	YawPivot =
 		CreateDefaultSubobject<USceneComponent>(
 			TEXT("YawPivot")
@@ -194,7 +193,7 @@ bool ATurretBase::HasValidTarget() const
 }
 
 
-FVector ATurretBase::GetTargetLocation() const
+FVector ATurretBase::GetCurrentTargetLocation() const
 {
 	if (!HasValidTarget())
 	{
@@ -215,7 +214,7 @@ bool ATurretBase::IsTargetInRange() const
 	const float DistanceSquared =
 		FVector::DistSquared(
 			MuzzlePoint->GetComponentLocation(),
-			GetTargetLocation()
+			GetCurrentTargetLocation()
 		);
 
 	return
@@ -239,7 +238,7 @@ bool ATurretBase::IsTargetInsideViewAngle() const
 
 	const FVector DirectionToTarget =
 		(
-			GetTargetLocation() -
+			GetCurrentTargetLocation() -
 			GetActorLocation()
 		).GetSafeNormal2D();
 
@@ -290,7 +289,12 @@ bool ATurretBase::HasLineOfSightToTarget() const
 
 	FHitResult HitResult;
 
-	FCollisionQueryParams QueryParams;
+	FCollisionQueryParams QueryParams(
+		SCENE_QUERY_STAT(TurretLineOfSight),
+		false,
+		this
+	);
+
 	QueryParams.AddIgnoredActor(this);
 	QueryParams.bTraceComplex = false;
 
@@ -299,7 +303,7 @@ bool ATurretBase::HasLineOfSightToTarget() const
 		World->LineTraceSingleByChannel(
 			HitResult,
 			MuzzlePoint->GetComponentLocation(),
-			GetTargetLocation(),
+			GetCurrentTargetLocation(),
 			ECC_Visibility,
 			QueryParams
 		);
@@ -349,7 +353,7 @@ bool ATurretBase::CanFireAtTarget() const
 
 	const FVector DesiredDirection =
 		(
-			GetTargetLocation() -
+			GetCurrentTargetLocation() -
 			MuzzlePoint->GetComponentLocation()
 		).GetSafeNormal();
 
@@ -381,7 +385,7 @@ void ATurretBase::UpdateTurretRotation(
 
 
 	const FVector DirectionToTarget =
-		GetTargetLocation() -
+		GetCurrentTargetLocation() -
 		MuzzlePoint->GetComponentLocation();
 
 	if (DirectionToTarget.IsNearlyZero())
@@ -597,7 +601,7 @@ void ATurretBase::FireAtTarget(
 )
 {
 	/*
-	 * 자식 클래스에서 실제 발사를 구현한다.
+	 * 자식 클래스에서 실제 발사 방식을 구현한다.
 	 */
 }
 

@@ -44,7 +44,7 @@ protected:
 
 public:
 	// ─────────────────────────────────────────────
-	// 타깃
+	// Target
 
 	UFUNCTION(
 		BlueprintCallable,
@@ -75,7 +75,7 @@ public:
 
 
 	// ─────────────────────────────────────────────
-	// 전투 상태
+	// Combat State
 
 	UFUNCTION(
 		BlueprintPure,
@@ -133,7 +133,7 @@ public:
 
 
 	// ─────────────────────────────────────────────
-	// Getter
+	// Data Getter
 
 	UFUNCTION(
 		BlueprintPure,
@@ -174,7 +174,7 @@ public:
 
 protected:
 	// ─────────────────────────────────────────────
-	// 내부 로직
+	// Internal Logic
 
 	bool LoadTurretData();
 
@@ -195,11 +195,17 @@ protected:
 
 	float GetCurrentFireInterval() const;
 
-	FVector GetTargetLocation() const;
+	/*
+	 * 현재 TargetActor의 조준 위치를 반환한다.
+	 *
+	 * AActor::GetTargetLocation(AActor*)과 이름이 겹치지 않도록
+	 * GetCurrentTargetLocation으로 명명한다.
+	 */
+	FVector GetCurrentTargetLocation() const;
 
 
 	// ─────────────────────────────────────────────
-	// BP 이벤트
+	// Blueprint Events
 
 	UFUNCTION(
 		BlueprintImplementableEvent,
@@ -244,7 +250,7 @@ protected:
 	TObjectPtr<USceneComponent> PitchPivot;
 
 	/*
-	 * 발사 위치와 방향
+	 * 발사 위치와 방향을 나타낸다.
 	 */
 	UPROPERTY(
 		VisibleAnywhere,
@@ -259,7 +265,7 @@ protected:
 
 	/*
 	 * MVP에서는 자동 탐색 대신
-	 * 레벨 또는 BP에서 직접 지정한다.
+	 * 레벨 또는 Blueprint에서 직접 지정한다.
 	 */
 	UPROPERTY(
 		EditInstanceOnly,
@@ -372,9 +378,9 @@ protected:
 	// Damaged Penalty
 
 	/*
-	 * HP 40% 이하일 때 발사 간격 배율
+	 * HP 40% 이하일 때 적용되는 발사 간격 배율.
 	 *
-	 * 1.5라면 0.2초 → 0.3초
+	 * 1.5라면 0.2초 → 0.3초가 된다.
 	 */
 	UPROPERTY(
 		EditAnywhere,
