@@ -20,16 +20,47 @@ enum class ESGBuildModeState : uint8
 UENUM(BlueprintType)
 enum class ESGPlacementFailureReason : uint8
 {
-	None                 UMETA(DisplayName = "None"),
-	NoSurface            UMETA(DisplayName = "No Surface"),
-	TooSteep             UMETA(DisplayName = "Too Steep"),
-	Overlap               UMETA(DisplayName = "Overlap"),
-	OutOfPlacementRange  UMETA(DisplayName = "Out Of Placement Range"),
-	OutsidePowerRange    UMETA(DisplayName = "Outside Power Range"),
-	InsufficientPower    UMETA(DisplayName = "Insufficient Power"),
-	InsufficientResources UMETA(DisplayName = "Insufficient Resources"),
-	StructureLimit       UMETA(DisplayName = "Structure Limit"),
-	InvalidDefinition    UMETA(DisplayName = "Invalid Definition")
+    None
+        UMETA(DisplayName = "None"),
+
+    NoSurface
+        UMETA(DisplayName = "No Surface"),
+
+    InvalidSurface
+        UMETA(DisplayName = "Invalid Surface"),
+
+    TooSteep
+        UMETA(DisplayName = "Too Steep"),
+
+    Unsupported
+        UMETA(DisplayName = "Unsupported"),
+
+    EnvironmentOverlap
+        UMETA(DisplayName = "Environment Overlap"),
+
+    StructureOverlap
+        UMETA(DisplayName = "Structure Overlap"),
+
+    PawnOverlap
+        UMETA(DisplayName = "Pawn Overlap"),
+
+    OutOfPlacementRange
+        UMETA(DisplayName = "Out Of Placement Range"),
+
+    OutsidePowerRange
+        UMETA(DisplayName = "Outside Power Range"),
+
+    InsufficientPower
+        UMETA(DisplayName = "Insufficient Power"),
+
+    InsufficientResources
+        UMETA(DisplayName = "Insufficient Resources"),
+
+    StructureLimit
+        UMETA(DisplayName = "Structure Limit"),
+
+    InvalidDefinition
+        UMETA(DisplayName = "Invalid Definition")
 };
 
 /**

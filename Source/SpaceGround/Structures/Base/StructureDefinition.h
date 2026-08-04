@@ -2,167 +2,268 @@
 
 #include "CoreMinimal.h"
 #include "Engine/DataTable.h"
+
 #include "StructureTypes.h"
+
 #include "StructureDefinition.generated.h"
 
-class AStructureBase;
+class AActor;
 class UTexture2D;
 
-
-/*
- * 모든 구조물의 DataTable Row
+/**
+ * 모든 구조물의 DataTable Row.
  *
- * DT_StructureData에서 구조물별 수치를 관리한다.
+ * DT_StructureData에서 구조물별 클래스, 설치 규칙,
+ * 자원 비용, 전력 및 전투 데이터를 관리한다.
  */
 USTRUCT(BlueprintType)
 struct FSGStructureDefinition : public FTableRowBase
 {
-	GENERATED_BODY()
+    GENERATED_BODY()
 
-	/*
-	 * 구조물 내부 식별자
-	 *
-	 * 예시:
-	 * PowerCore
-	 * MachineGunTurret
-	 * Barricade
-	 */
-	UPROPERTY(
-		EditAnywhere,
-		BlueprintReadOnly,
-		Category = "Identity"
-	)
-	FName StructureID = NAME_None;
+public:
+    // ─────────────────────────────────────────────
+    // Identity
 
-	UPROPERTY(
-		EditAnywhere,
-		BlueprintReadOnly,
-		Category = "Identity"
-	)
-	FText DisplayName;
+    UPROPERTY(
+        EditAnywhere,
+        BlueprintReadOnly,
+        Category = "Identity"
+    )
+    FName StructureID = NAME_None;
 
-	UPROPERTY(
-		EditAnywhere,
-		BlueprintReadOnly,
-		Category = "Identity",
-		meta = (MultiLine = true)
-	)
-	FText Description;
+    UPROPERTY(
+        EditAnywhere,
+        BlueprintReadOnly,
+        Category = "Identity"
+    )
+    FText DisplayName;
 
-	UPROPERTY(
-		EditAnywhere,
-		BlueprintReadOnly,
-		Category = "Identity"
-	)
-	ESGStructureCategory Category =
-		ESGStructureCategory::None;
+    UPROPERTY(
+        EditAnywhere,
+        BlueprintReadOnly,
+        Category = "Identity",
+        meta = (MultiLine = true)
+    )
+    FText Description;
 
-	/*
-	 * DataTable Row를 통해 생성할 구조물 클래스
-	 */
-	UPROPERTY(
-		EditAnywhere,
-		BlueprintReadOnly,
-		Category = "Class"
-	)
-	TSubclassOf<AStructureBase> StructureClass;
+    UPROPERTY(
+        EditAnywhere,
+        BlueprintReadOnly,
+        Category = "Identity"
+    )
+    ESGStructureCategory Category =
+        ESGStructureCategory::None;
 
-	UPROPERTY(
-		EditAnywhere,
-		BlueprintReadOnly,
-		Category = "Visual"
-	)
-	TObjectPtr<UTexture2D> Icon = nullptr;
+public:
+    // ─────────────────────────────────────────────
+    // Class
 
-	/*
-	 * 구조물 최대 체력
-	 */
-	UPROPERTY(
-		EditAnywhere,
-		BlueprintReadOnly,
-		Category = "Health",
-		meta = (ClampMin = "1.0")
-	)
-	float MaxHP = 1000.0f;
+    /**
+     * 실제 설치할 구조물 클래스.
+     *
+     * StructureBase 또는 그 자식 Blueprint를 지정한다.
+     */
+    UPROPERTY(
+        EditAnywhere,
+        BlueprintReadOnly,
+        Category = "Class"
+    )
+    TSubclassOf<AActor> StructureClass;
 
-	/*
-	 * 건설 완료까지 걸리는 시간
-	 *
-	 * 현재는 실제 건설 모드에서 사용하지 않지만
-	 * 나중을 위해 DataTable에 저장한다.
-	 */
-	UPROPERTY(
-		EditAnywhere,
-		BlueprintReadOnly,
-		Category = "Build",
-		meta = (ClampMin = "0.0")
-	)
-	float BuildTime = 1.0f;
+    /**
+     * 건설 모드에서 표시할 홀로그램 프리뷰 클래스.
+     */
+    UPROPERTY(
+        EditAnywhere,
+        BlueprintReadOnly,
+        Category = "Class"
+    )
+    TSubclassOf<AActor> PreviewClass;
 
-	/*
-	 * 동시에 배치할 수 있는 최대 개수
-	 */
-	UPROPERTY(
-		EditAnywhere,
-		BlueprintReadOnly,
-		Category = "Build",
-		meta = (ClampMin = "1")
-	)
-	int32 MaxInstallCount = 1;
+public:
+    // ─────────────────────────────────────────────
+    // Visual
 
-	/*
-	 * 현재 전투 중 설치 가능한지 여부
-	 *
-	 * 건설 모드 구현 시 사용한다.
-	 */
-	UPROPERTY(
-		EditAnywhere,
-		BlueprintReadOnly,
-		Category = "Build"
-	)
-	bool bCanBuildDuringCombat = false;
+    UPROPERTY(
+        EditAnywhere,
+        BlueprintReadOnly,
+        Category = "Visual"
+    )
+    TObjectPtr<UTexture2D> Icon = nullptr;
 
-	/*
-	 * 구조물 제작 비용
-	 */
-	UPROPERTY(
-		EditAnywhere,
-		BlueprintReadOnly,
-		Category = "Build"
-	)
-	TArray<FSGResourceCost> BuildCosts;
+public:
+    // ─────────────────────────────────────────────
+    // Health
 
-	/*
-	 * 발전기 및 전력 소비 데이터
-	 */
-	UPROPERTY(
-		EditAnywhere,
-		BlueprintReadOnly,
-		Category = "Power"
-	)
-	FSGPowerData PowerData;
+    UPROPERTY(
+        EditAnywhere,
+        BlueprintReadOnly,
+        Category = "Health",
+        meta = (ClampMin = "1.0")
+    )
+    float MaxHP = 1000.0f;
 
-	/*
-	 * 터렛 구조물에서 사용하는 데이터
-	 *
-	 * 터렛이 아닌 구조물은 기본값으로 둔다.
-	 */
-	UPROPERTY(
-		EditAnywhere,
-		BlueprintReadOnly,
-		Category = "Combat"
-	)
-	FSGTurretData TurretData;
+public:
+    // ─────────────────────────────────────────────
+    // Build
 
-	/*
-	 * 함정 구조물에서 사용하는 데이터
-	 *
-	 * 함정이 아닌 구조물은 기본값으로 둔다.
-	 */
-	UPROPERTY(
-		EditAnywhere,
-		BlueprintReadOnly,
-		Category = "Trap"
-	)
-	FSGTrapData TrapData;
+    UPROPERTY(
+        EditAnywhere,
+        BlueprintReadOnly,
+        Category = "Build",
+        meta = (ClampMin = "0.0")
+    )
+    float BuildTime = 1.0f;
+
+    UPROPERTY(
+        EditAnywhere,
+        BlueprintReadOnly,
+        Category = "Build",
+        meta = (ClampMin = "1")
+    )
+    int32 MaxInstallCount = 1;
+
+    UPROPERTY(
+        EditAnywhere,
+        BlueprintReadOnly,
+        Category = "Build"
+    )
+    bool bCanBuildDuringCombat = false;
+
+    UPROPERTY(
+        EditAnywhere,
+        BlueprintReadOnly,
+        Category = "Build"
+    )
+    TArray<FSGResourceCost> BuildCosts;
+
+public:
+    // ─────────────────────────────────────────────
+    // Placement
+
+    UPROPERTY(
+        EditAnywhere,
+        BlueprintReadOnly,
+        Category = "Placement",
+        meta = (
+            ClampMin = "0.0",
+            ClampMax = "89.0",
+            Units = "Degrees"
+        )
+    )
+    float MaxAllowedSlope = 10.0f;
+
+    /**
+     * 설치 중첩 검사에 사용하는 Box Half Extent.
+     */
+    UPROPERTY(
+        EditAnywhere,
+        BlueprintReadOnly,
+        Category = "Placement",
+        meta = (ClampMin = "1.0")
+    )
+    FVector PlacementExtent =
+        FVector(50.0f, 50.0f, 50.0f);
+
+    UPROPERTY(
+        EditAnywhere,
+        BlueprintReadOnly,
+        Category = "Placement"
+    )
+    float GroundOffset = 0.0f;
+    
+    /**
+ * 구조물의 바닥 전체가 지면에 지지되어야 하는지 여부.
+ *
+ * true이면 중앙과 네 모서리 지면 검사를 수행한다.
+ */
+    UPROPERTY(
+        EditAnywhere,
+        BlueprintReadOnly,
+        Category = "Placement"
+    )
+    bool bRequireFullGroundSupport = true;
+
+    /**
+     * 구조물 바닥 모서리에서 아래로 검사하는 깊이.
+     *
+     * 구조물이 절벽 가장자리나 공중에 걸쳐 있는지 검사한다.
+     */
+    UPROPERTY(
+        EditAnywhere,
+        BlueprintReadOnly,
+        Category = "Placement",
+        meta = (
+            ClampMin = "1.0",
+            Units = "cm"
+        )
+    )
+    float SupportTraceDepth = 50.0f;
+
+    /**
+     * 모서리 지면 검사 시작 높이.
+     *
+     * 바닥과 정확히 같은 위치에서 Trace를 시작하면
+     * 충돌 정밀도 때문에 검사가 실패할 수 있어 조금 위에서 시작한다.
+     */
+    UPROPERTY(
+        EditAnywhere,
+        BlueprintReadOnly,
+        Category = "Placement",
+        meta = (
+            ClampMin = "1.0",
+            Units = "cm"
+        )
+    )
+    float SupportTraceStartHeight = 20.0f;
+
+    /**
+     * 기존 구조물과 확보할 추가 간격.
+     *
+     * PlacementExtent에 이 값을 더해 중첩 검사를 수행한다.
+     */
+    UPROPERTY(
+        EditAnywhere,
+        BlueprintReadOnly,
+        Category = "Placement",
+        meta = (
+            ClampMin = "0.0",
+            Units = "cm"
+        )
+    )
+    float StructureSpacing = 10.0f;
+
+public:
+    // ─────────────────────────────────────────────
+    // Power
+
+    UPROPERTY(
+        EditAnywhere,
+        BlueprintReadOnly,
+        Category = "Power"
+    )
+    FSGPowerData PowerData;
+
+public:
+    // ─────────────────────────────────────────────
+    // Combat
+
+    UPROPERTY(
+        EditAnywhere,
+        BlueprintReadOnly,
+        Category = "Combat"
+    )
+    FSGTurretData TurretData;
+
+public:
+    // ─────────────────────────────────────────────
+    // Trap
+
+    UPROPERTY(
+        EditAnywhere,
+        BlueprintReadOnly,
+        Category = "Trap"
+    )
+    FSGTrapData TrapData;
 };

@@ -7,6 +7,8 @@
 #include "ASGPlayerCharacter.generated.h"
 
 class UInputAction;
+class UInputMappingContext;
+
 class USGConstructionComponent;
 class USGInteractionComponent;
 class USGResourceInventoryComponent;
@@ -36,7 +38,9 @@ public:
 protected:
     virtual void BeginPlay() override;
 
-    virtual void Tick(float DeltaSeconds) override;
+    virtual void Tick(
+        float DeltaSeconds
+    ) override;
 
     virtual void SetupPlayerInputComponent(
         UInputComponent* PlayerInputComponent
@@ -88,6 +92,12 @@ public:
     }
 
     UFUNCTION(BlueprintPure, Category = "Player|Movement")
+    bool IsZooming() const
+    {
+        return bIsZooming;
+    }
+
+    UFUNCTION(BlueprintPure, Category = "Player|Movement")
     float GetForwardInputValue() const
     {
         return ForwardInputValue;
@@ -106,8 +116,16 @@ public:
     }
 
 protected:
-    void Move(const FInputActionValue& Value);
-    void Look(const FInputActionValue& Value);
+    // ─────────────────────────────────────────────
+    // 기본 입력
+
+    void Move(
+        const FInputActionValue& Value
+    );
+
+    void Look(
+        const FInputActionValue& Value
+    );
 
     void HandleJumpStarted();
     void HandleJumpCompleted();
@@ -126,13 +144,35 @@ protected:
     void HandleLeanRightStarted();
     void HandleLeanRightCompleted();
 
+    // ─────────────────────────────────────────────
+    // 건설 입력
+
     void HandleBuildMode();
+
     void HandlePlaceStructure();
+
     void HandleCancelBuild();
-    void HandleRotateStructure(const FInputActionValue& Value);
+
+    void HandleRotateStructure(
+        const FInputActionValue& Value
+    );
+
+    void HandleSelectPowerCore();
+
+    void HandleSelectTurret();
+
+    void HandleSelectBarricade();
+
+    void HandleSelectShockMine();
+
+    void HandleSelectSlowPad();
+
+    // ─────────────────────────────────────────────
+    // 상호작용 입력
 
     void HandleInteract();
 
+protected:
     /**
      * BP Traversal 컴포넌트가 Jump 입력을 소비했는지 반환한다.
      *
@@ -155,7 +195,9 @@ protected:
      * 기존 BP Zoom Timeline을 실행하기 위한 이벤트.
      */
     UFUNCTION(BlueprintImplementableEvent, Category = "Player|Camera")
-    void OnZoomStateChanged(bool bZoomActive);
+    void OnZoomStateChanged(
+        bool bZoomActive
+    );
 
     /**
      * 기존 AnimBP Lean 값 연결용 이벤트.
@@ -173,160 +215,368 @@ protected:
         ESGPlayerActionState NewState
     );
 
+    /**
+     * 구조물 단축키 입력 또는 건설 모드 진입 시 호출한다.
+     *
+     * Blueprint에서는 전달받은 RowName으로
+     * 기존 Structure DataTable의 Row를 조회한 뒤,
+     * ConstructionComponent의
+     * SetSelectedStructureDefinition()을 호출한다.
+     */
 private:
     void UpdateControlRotationForAnimation();
-    void SetSprinting(bool bNewSprinting);
+
+    void SetSprinting(
+        bool bNewSprinting
+    );
+
     void SetLeanValues(
         float NewBaseLean,
         float NewLeftArmLean,
         float NewRightArmLean
     );
 
+    void AddConstructionMappingContext();
+
+    void RemoveConstructionMappingContext();
+
+    void RequestStructureSelection(
+        FName StructureRowName
+    );
+
 protected:
-    UPROPERTY(VisibleAnywhere, BlueprintReadOnly,
-        Category = "Player|Component")
+    // ─────────────────────────────────────────────
+    // 컴포넌트
+
+    UPROPERTY(
+        VisibleAnywhere,
+        BlueprintReadOnly,
+        Category = "Player|Component"
+    )
     TObjectPtr<USGResourceInventoryComponent>
     ResourceInventoryComponent;
 
-    UPROPERTY(VisibleAnywhere, BlueprintReadOnly,
-        Category = "Player|Component")
+    UPROPERTY(
+        VisibleAnywhere,
+        BlueprintReadOnly,
+        Category = "Player|Component"
+    )
     TObjectPtr<USGConstructionComponent>
     ConstructionComponent;
 
-    UPROPERTY(VisibleAnywhere, BlueprintReadOnly,
-        Category = "Player|Component")
+    UPROPERTY(
+        VisibleAnywhere,
+        BlueprintReadOnly,
+        Category = "Player|Component"
+    )
     TObjectPtr<USGInteractionComponent>
     InteractionComponent;
 
 protected:
-    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
+    // ─────────────────────────────────────────────
+    // 기본 Input Action
+
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Input"
+    )
     TObjectPtr<UInputAction> MoveAction;
 
-    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Input"
+    )
     TObjectPtr<UInputAction> LookAction;
 
-    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Input"
+    )
     TObjectPtr<UInputAction> JumpAction;
 
-    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Input"
+    )
     TObjectPtr<UInputAction> CrouchAction;
 
-    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Input"
+    )
     TObjectPtr<UInputAction> SprintAction;
 
-    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Input"
+    )
     TObjectPtr<UInputAction> ZoomAction;
 
-    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Input"
+    )
     TObjectPtr<UInputAction> LeanLeftAction;
 
-    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Input"
+    )
     TObjectPtr<UInputAction> LeanRightAction;
 
-    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
-    TObjectPtr<UInputAction> BuildModeAction;
-
-    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
-    TObjectPtr<UInputAction> PlaceStructureAction;
-
-    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
-    TObjectPtr<UInputAction> CancelBuildAction;
-
-    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
-    TObjectPtr<UInputAction> RotateStructureAction;
-
-    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Input"
+    )
     TObjectPtr<UInputAction> InteractAction;
 
 protected:
-    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly,
+    // ─────────────────────────────────────────────
+    // 건설 Input Mapping Context
+
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Input|Construction"
+    )
+    TObjectPtr<UInputMappingContext>
+    ConstructionMappingContext;
+
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Input|Construction"
+    )
+    int32 ConstructionMappingPriority = 10;
+
+protected:
+    // ─────────────────────────────────────────────
+    // 건설 Input Action
+
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Input|Construction"
+    )
+    TObjectPtr<UInputAction> BuildModeAction;
+
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Input|Construction"
+    )
+    TObjectPtr<UInputAction> PlaceStructureAction;
+
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Input|Construction"
+    )
+    TObjectPtr<UInputAction> CancelBuildAction;
+
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Input|Construction"
+    )
+    TObjectPtr<UInputAction> RotateStructureAction;
+
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Input|Construction"
+    )
+    TObjectPtr<UInputAction> SelectPowerCoreAction;
+
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Input|Construction"
+    )
+    TObjectPtr<UInputAction> SelectTurretAction;
+
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Input|Construction"
+    )
+    TObjectPtr<UInputAction> SelectBarricadeAction;
+
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Input|Construction"
+    )
+    TObjectPtr<UInputAction> SelectShockMineAction;
+
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Input|Construction"
+    )
+    TObjectPtr<UInputAction> SelectSlowPadAction;
+
+protected:
+    // ─────────────────────────────────────────────
+    // 이동 설정
+
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
         Category = "Movement|Speed",
-        meta = (ClampMin = "0.0"))
+        meta = (ClampMin = "0.0")
+    )
     float WalkSpeed = 150.0f;
 
-    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly,
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
         Category = "Movement|Speed",
-        meta = (ClampMin = "0.0"))
+        meta = (ClampMin = "0.0")
+    )
     float SprintSpeed = 450.0f;
 
     /**
      * 기획상 점프를 사용하지 않으므로 기본 false.
      * 에셋 테스트 단계에서는 true로 변경할 수 있다.
      */
-    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly,
-        Category = "Movement|Feature")
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Movement|Feature"
+    )
     bool bEnableJump = false;
 
     /**
      * 기획상 앉기를 사용하지 않으므로 기본 false.
      */
-    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly,
-        Category = "Movement|Feature")
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Movement|Feature"
+    )
     bool bEnableCrouch = false;
 
     /**
      * Vault/Mantle를 실제 게임에서 사용할지 여부.
      */
-    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly,
-        Category = "Movement|Feature")
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Movement|Feature"
+    )
     bool bEnableTraversal = false;
 
-    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly,
-        Category = "Movement|Feature")
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Movement|Feature"
+    )
     bool bEnableLean = true;
 
-    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly,
-        Category = "Movement|Lean")
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Movement|Lean"
+    )
     float LeanAngle = 25.0f;
 
-    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly,
-        Category = "Movement|Lean")
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Movement|Lean"
+    )
     float LeanArmAngle = 15.0f;
 
 protected:
-    UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly,
-        Category = "Player|State")
+    // ─────────────────────────────────────────────
+    // 런타임 상태
+
+    UPROPERTY(
+        VisibleInstanceOnly,
+        BlueprintReadOnly,
+        Category = "Player|State"
+    )
     ESGPlayerActionState PlayerActionState =
         ESGPlayerActionState::Normal;
 
-    UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly,
-        Category = "Movement")
+    UPROPERTY(
+        VisibleInstanceOnly,
+        BlueprintReadOnly,
+        Category = "Movement"
+    )
     bool bIsSprinting = false;
 
-    UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly,
-        Category = "Movement")
+    UPROPERTY(
+        VisibleInstanceOnly,
+        BlueprintReadOnly,
+        Category = "Movement"
+    )
     bool bIsZooming = false;
 
-    UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly,
-        Category = "Movement")
+    UPROPERTY(
+        VisibleInstanceOnly,
+        BlueprintReadOnly,
+        Category = "Movement"
+    )
     float ForwardInputValue = 0.0f;
 
-    UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly,
-        Category = "Movement")
+    UPROPERTY(
+        VisibleInstanceOnly,
+        BlueprintReadOnly,
+        Category = "Movement"
+    )
     float RightInputValue = 0.0f;
 
-    UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly,
-        Category = "Movement")
+    UPROPERTY(
+        VisibleInstanceOnly,
+        BlueprintReadOnly,
+        Category = "Movement"
+    )
     float TurnInputValue = 0.0f;
 
-    UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly,
-        Category = "Movement")
+    UPROPERTY(
+        VisibleInstanceOnly,
+        BlueprintReadOnly,
+        Category = "Movement"
+    )
     float LookInputValue = 0.0f;
 
-    UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly,
-        Category = "Animation")
+    UPROPERTY(
+        VisibleInstanceOnly,
+        BlueprintReadOnly,
+        Category = "Animation"
+    )
     FRotator ControlRotationForAnimation =
         FRotator::ZeroRotator;
 
-    UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly,
-        Category = "Movement|Lean")
+    UPROPERTY(
+        VisibleInstanceOnly,
+        BlueprintReadOnly,
+        Category = "Movement|Lean"
+    )
     float BaseLeaningAlpha = 0.0f;
 
-    UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly,
-        Category = "Movement|Lean")
+    UPROPERTY(
+        VisibleInstanceOnly,
+        BlueprintReadOnly,
+        Category = "Movement|Lean"
+    )
     float LeaningLeftArmAlpha = 0.0f;
 
-    UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly,
-        Category = "Movement|Lean")
+    UPROPERTY(
+        VisibleInstanceOnly,
+        BlueprintReadOnly,
+        Category = "Movement|Lean"
+    )
     float LeaningRightArmAlpha = 0.0f;
 };
