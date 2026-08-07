@@ -3,7 +3,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
 #include "InputActionValue.h"
-#include "../Player/SGPlayerTypes.h"
+#include "SpaceGround/CommonData/SGPlayerTypes.h"
 #include "ASGPlayerCharacter.generated.h"
 
 class UInputAction;

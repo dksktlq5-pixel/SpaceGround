@@ -2,7 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
-#include "../Resources/SGResourceTypes.h"
+#include "SpaceGround/CommonData/SGResourceTypes.h"
 #include "USGResourceInventoryComponent.generated.h"
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(
