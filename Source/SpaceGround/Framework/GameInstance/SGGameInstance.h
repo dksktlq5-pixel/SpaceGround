@@ -26,14 +26,14 @@ private:
 	virtual void Init() override; // 게임 시작 시 1회 (레벨 로드보다도 먼저)
 	virtual void Shutdown() override; // 게임 종료 시 -> 게임 진행상황 저장?
 	
-	void Initialize_TotalDamageAmounts();
-	
 	// todo : , 옵션 전역 설정, SaveGame 오브젝트 저장 함수
 #pragma region Damage Statistics
 public:
 	UPROPERTY(BlueprintReadOnly)
 	TMap<EDamageElement, float> TotalDamageAmounts; // 모든 라운드 합산 속성별 데미지
 
+	void Initialize_TotalDamageAmounts();
+	
 	UFUNCTION(BlueprintCallable)
 	void Add_RoundDamageAmount(const TMap<EDamageElement, float>& RoundDamageAmount);
 

@@ -18,7 +18,7 @@ void USGGameInstance::Initialize_TotalDamageAmounts()
 {
 	for (auto& Pair : TotalDamageAmounts)
 	{
-		Pair.Value = 0.f;
+		TotalDamageAmounts.FindOrAdd(Pair.Key) = 0.f;
 	}
 }
 

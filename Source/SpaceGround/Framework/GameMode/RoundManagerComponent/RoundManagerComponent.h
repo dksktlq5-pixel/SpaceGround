@@ -21,8 +21,6 @@ public:
 
 protected:
 	virtual void BeginPlay() override;
-	
-	void GetLifetimeReplicatedProps(TArray<class FLifetimeProperty>& OutLifetimeProps) const override;
 
 public:
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType,

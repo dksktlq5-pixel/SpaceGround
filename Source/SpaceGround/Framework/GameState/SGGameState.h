@@ -25,9 +25,14 @@ private:
 	ASGGameState();
 	
 	virtual void BeginPlay() override;
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 	
 public:
+	UPROPERTY(ReplicatedUsing = OnRep_CurrentRoundIndex_GameState, BlueprintReadOnly)
 	int32 CurrentRoundIndex_GameState = 0;
+	
+	UFUNCTION()
+	void OnRep_CurrentRoundIndex_GameState();
 
 public:
 #pragma region Count Round_DamageAmount
@@ -36,10 +41,7 @@ public:
 	UPROPERTY(BlueprintReadOnly)
 	TMap<EDamageElement, float> Round_DamageAmounts;
 	
-	void Add_Round_DamageAmount(EDamageElement element, float amount);
-	
-	UFUNCTION(BlueprintCallable) // 서버 RPC?
-	void Add_Round_DamageStats(); // 게임 인스턴스의 데미지 맵에 이번 라운드 데미지를 누적시키는 함수
+	void Add_Round_DamageAmount(EDamageElement element, float amount); // 속성별 데미지 추가 함수
 	
 	void Set_Round_DamageAmounts_Zero();
 	

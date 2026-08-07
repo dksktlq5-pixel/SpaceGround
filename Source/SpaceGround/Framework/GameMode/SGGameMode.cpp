@@ -3,6 +3,7 @@
 
 #include "SGGameMode.h"
 
+#include "SpaceGround/Framework/GameInstance/SGGameInstance.h"
 #include "SpaceGround/Framework/GameState/SGGameState.h"
 
 ASGGameMode::ASGGameMode()
@@ -27,6 +28,12 @@ void ASGGameMode::HandleRoundChanged(int32 NewRoundIndex) // 라운드 델리게
 	if (ASGGameState* GS = GetGameState<ASGGameState>())
 	{
 		GS->CurrentRoundIndex_GameState = NewRoundIndex;
+		
+		if (USGGameInstance* GI = GetGameInstance<USGGameInstance>())
+		{
+			GI->Add_RoundDamageAmount(GS->Round_DamageAmounts);
+		}
+		
 		GS->Set_Round_DamageAmounts_Zero();
 	}
 }
