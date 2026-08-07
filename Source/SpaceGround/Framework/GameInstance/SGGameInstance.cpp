@@ -6,7 +6,7 @@ void USGGameInstance::Init()
 {
 	Super::Init();
 	
-	TotalDamageAmounts.FindOrAdd()
+	Initialize_TotalDamageAmounts();
 }
 
 void USGGameInstance::Shutdown()
@@ -23,7 +23,11 @@ void USGGameInstance::Initialize_TotalDamageAmounts()
 }
 
 // todo : 라운드 종료 시 호출
-void USGGameInstance::Add_DamageAmount(EDamageElement Element, float DamageAmount)
+void USGGameInstance::Add_RoundDamageAmount(const TMap<EDamageElement, float>& RoundDamageAmount)
 {
-	TotalDamageAmounts.Add(Element) += DamageAmount;
+	for (const auto& Pair : RoundDamageAmount)
+	{
+		TotalDamageAmounts.FindOrAdd(Pair.Key) += Pair.Value;
+	}
 }
+
