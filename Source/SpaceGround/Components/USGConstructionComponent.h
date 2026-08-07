@@ -3,8 +3,8 @@
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
 
-#include "../Construction/SGConstructionTypes.h"
-#include "../Resources/SGResourceTypes.h"
+#include "SpaceGround/CommonData/SGConstructionTypes.h"
+#include "SpaceGround/CommonData/SGResourceTypes.h"
 
 #include "USGConstructionComponent.generated.h"
 
