@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Engine/GameInstance.h"
+#include "SpaceGround/CommonData/SGDamageTypes.h"
 #include "SGGameInstance.generated.h"
 
 /**
@@ -25,25 +26,17 @@ private:
 	virtual void Init() override; // 게임 시작 시 1회 (레벨 로드보다도 먼저)
 	virtual void Shutdown() override; // 게임 종료 시 -> 게임 진행상황 저장?
 	
+	void Initialize_TotalDamageAmounts();
+	
 	// todo : , 옵션 전역 설정, SaveGame 오브젝트 저장 함수
-	
-	// 데미지 통계 변수 및 함수
+#pragma region Damage Statistics
 public:
-	UPROPERTY(Blueprintable)
-	float DamageAmount_FirstElement;
-	
-	UPROPERTY(Blueprintable)
-	float DamageAmount_SecondElement;
-	
-	UPROPERTY(Blueprintable)
-	float DamageAmount_ThirdElement;
-	
-	UPROPERTY(Blueprintable)
-	float DamageAmount_FourthElement;
-	
-	UPROPERTY(Blueprintable)
-	float DamageAmount_FifthElement;
+	UPROPERTY(BlueprintReadOnly)
+	TMap<EDamageElement, float> TotalDamageAmounts; // 모든 라운드 합산 속성별 데미지
 
 	UFUNCTION(BlueprintCallable)
-	float Count_DamageAmount(float Element);
+	void Add_DamageAmount(EDamageElement Element, float DamageAmounts);
+
+#pragma endregion
+	
 };
