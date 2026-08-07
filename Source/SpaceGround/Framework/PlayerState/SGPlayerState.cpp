@@ -2,3 +2,12 @@
 
 
 #include "SGPlayerState.h"
+
+ASGPlayerState::ASGPlayerState()
+{
+}
+
+void ASGPlayerState::BeginPlay()
+{
+	Super::BeginPlay();
+}
