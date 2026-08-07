@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/GameState.h"
+#include "SpaceGround/CommonData/SGDamageTypes.h"
 #include "SGGameState.generated.h"
 
 /**
@@ -19,4 +20,28 @@ UCLASS()
 class SPACEGROUND_API ASGGameState : public AGameState
 {
 	GENERATED_BODY()
+	
+private:
+	ASGGameState();
+	
+	virtual void BeginPlay() override;
+	
+public:
+	int32 CurrentRoundIndex_GameState = 0;
+
+public:
+#pragma region Count Round_DamageAmount
+	// todo : 보스 피격 시 속성별로 누적 데미지 저장(보스쪽에서 호출해야 함)
+	
+	UPROPERTY(BlueprintReadOnly)
+	TMap<EDamageElement, float> Round_DamageAmounts;
+	
+	void Add_Round_DamageAmount(EDamageElement element, float amount);
+	
+	UFUNCTION(BlueprintCallable) // 서버 RPC?
+	void Add_Round_DamageStats(); // 게임 인스턴스의 데미지 맵에 이번 라운드 데미지를 누적시키는 함수
+	
+	void Set_Round_DamageAmounts_Zero();
+	
+#pragma endregion
 };

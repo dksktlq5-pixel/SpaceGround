@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/GameMode.h"
+#include "RoundManagerComponent/RoundManagerComponent.h"
 #include "SGGameMode.generated.h"
 
 /**
@@ -20,4 +21,16 @@ UCLASS()
 class SPACEGROUND_API ASGGameMode : public AGameMode
 {
 	GENERATED_BODY()
+	
+private:
+	ASGGameMode();
+	
+	virtual void BeginPlay() override;
+	
+	UPROPERTY(VisibleAnywhere)
+	URoundManagerComponent* RoundManagerComponent;
+	
+public:
+	void HandleRoundChanged(int32 NewRoundIndex);
+	
 };
