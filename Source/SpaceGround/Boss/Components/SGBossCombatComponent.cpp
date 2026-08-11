@@ -17,49 +17,68 @@ void USGBossCombatComponent::TickComponent(const float DeltaTime,
 	const ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
-	if (AttackState == ESGBossAttackState::Idle) return;
+
+	if (AttackState == ESGBossAttackState::Idle)
+	{
+		SetComponentTickEnabled(false);
+		return;
+	}
+
+	if (!IsValid(CurrentTarget))
+	{
+		FinishCurrentAttack(false);
+		return;
+	}
+
+	const FSGAttackCommonData* CommonData = FindCommonAttackData(CurrentAttackType);
+	if (!CommonData)
+	{
+		FinishCurrentAttack(false);
+		return;
+	}
 
 	AttackElapsedTime += DeltaTime;
-	const float LockTime = FMath::Max(0.0f, SingleSlamWindupTime - DirectionLockLeadTime);
 
-	if (AttackState == ESGBossAttackState::Tracking)
+	if (CurrentAttackType == ESGBossAttackType::SingleSlam)
 	{
-		UpdateTargetTracking(DeltaTime);
-		if (AttackState != ESGBossAttackState::Idle && AttackElapsedTime >= LockTime)
+		const float LockTime = FMath::Max(0.0f,
+			SingleSlamData.FallbackWindupTime
+			- SingleSlamData.FallbackDirectionLockLeadTime);
+
+		if (AttackState == ESGBossAttackState::Tracking)
 		{
-			LockAttackDirection();
+			UpdateTargetTracking(DeltaTime);
+			if (AttackState != ESGBossAttackState::Idle && AttackElapsedTime >= LockTime)
+			{
+				NotifyLockAttackDirection();
+			}
 		}
-	}
 
-	if (AttackState != ESGBossAttackState::Idle && !bHitExecuted
-		&& AttackElapsedTime >= SingleSlamWindupTime)
-	{
-		ExecuteSingleSlamHit();
-	}
+		if (AttackState != ESGBossAttackState::Idle && !bHitExecuted
+			&& AttackElapsedTime >= SingleSlamData.FallbackWindupTime)
+		{
+			NotifyExecuteCurrentAttackHit();
+		}
 
-	const float EndTime = SingleSlamWindupTime + SingleSlamRecoveryTime + SingleSlamCooldown;
-	if (AttackState != ESGBossAttackState::Idle && AttackElapsedTime >= EndTime)
-	{
-		FinishCurrentAttack(true);
+		const float EndTime = SingleSlamData.FallbackWindupTime
+			+ FMath::Max(0.0f, CommonData->RecoveryTime);
+		if (AttackState != ESGBossAttackState::Idle && AttackElapsedTime >= EndTime)
+		{
+			FinishCurrentAttack(true);
+		}
 	}
 }
 
-bool USGBossCombatComponent::StartSingleSlam(AActor* TargetActor)
+bool USGBossCombatComponent::StartAttack(
+	const ESGBossAttackType AttackType,
+	AActor* TargetActor)
 {
+	if (!CanStartAttack(AttackType, TargetActor) || !ValidateAttackData(AttackType))
+	{
+		return false;
+	}
+
 	AActor* OwnerActor = GetOwner();
-	if (AttackState != ESGBossAttackState::Idle || !IsValid(OwnerActor) || !IsValid(TargetActor))
-	{
-		return false;
-	}
-
-	const float Distance = FVector::Dist2D(OwnerActor->GetActorLocation(), TargetActor->GetActorLocation());
-	if (Distance > SingleSlamAttackRange)
-	{
-		UE_LOG(LogTemp, Verbose, TEXT("[BossCombat] Single Slam rejected. Distance=%.1f Range=%.1f"),
-			Distance, SingleSlamAttackRange);
-		return false;
-	}
-
 	if (const APawn* OwnerPawn = Cast<APawn>(OwnerActor))
 	{
 		if (AAIController* AIController = Cast<AAIController>(OwnerPawn->GetController()))
@@ -68,26 +87,147 @@ bool USGBossCombatComponent::StartSingleSlam(AActor* TargetActor)
 		}
 	}
 
+	CurrentAttackType = AttackType;
 	CurrentTarget = TargetActor;
 	AttackElapsedTime = 0.0f;
 	bHitExecuted = false;
 	AttackState = ESGBossAttackState::Tracking;
-	LockedAttackDirection = OwnerActor->GetActorForwardVector();
+	LockedAttackDirection = OwnerActor->GetActorForwardVector().GetSafeNormal2D();
+	if (LockedAttackDirection.IsNearlyZero())
+	{
+		LockedAttackDirection = FVector::ForwardVector;
+	}
+
 	SetComponentTickEnabled(true);
-	BP_OnSingleSlamStarted();
-	UE_LOG(LogTemp, Log, TEXT("[BossCombat] Single Slam started. Target=%s"), *GetNameSafe(TargetActor));
+	BP_OnAttackStarted(AttackType);
+
+	UE_LOG(LogTemp, Log, TEXT("[BossCombat] Attack started. Type=%d Target=%s"),
+		static_cast<int32>(AttackType), *GetNameSafe(TargetActor));
 	return true;
+}
+
+bool USGBossCombatComponent::StartSingleSlam(AActor* TargetActor)
+{
+	return StartAttack(ESGBossAttackType::SingleSlam, TargetActor);
 }
 
 void USGBossCombatComponent::CancelCurrentAttack()
 {
-	if (AttackState != ESGBossAttackState::Idle) FinishCurrentAttack(false);
+	if (AttackState != ESGBossAttackState::Idle)
+	{
+		FinishCurrentAttack(false);
+	}
+}
+
+void USGBossCombatComponent::NotifyLockAttackDirection()
+{
+	if (AttackState == ESGBossAttackState::Tracking)
+	{
+		LockAttackDirection();
+	}
+}
+
+void USGBossCombatComponent::NotifyExecuteCurrentAttackHit()
+{
+	if (AttackState == ESGBossAttackState::Idle || bHitExecuted)
+	{
+		return;
+	}
+
+	switch (CurrentAttackType)
+	{
+	case ESGBossAttackType::SingleSlam:
+		ExecuteSingleSlamHit();
+		break;
+
+	default:
+		UE_LOG(LogTemp, Warning, TEXT("[BossCombat] No hit implementation for AttackType=%d."),
+			static_cast<int32>(CurrentAttackType));
+		FinishCurrentAttack(false);
+		break;
+	}
+}
+
+bool USGBossCombatComponent::CanStartAttack(
+	const ESGBossAttackType AttackType,
+	AActor* TargetActor) const
+{
+	const AActor* OwnerActor = GetOwner();
+	const FSGAttackCommonData* CommonData = FindCommonAttackData(AttackType);
+	if (AttackState != ESGBossAttackState::Idle || !IsValid(OwnerActor)
+		|| !IsValid(TargetActor) || !CommonData)
+	{
+		return false;
+	}
+
+	if (GetRemainingCooldown(AttackType) > 0.0f)
+	{
+		return false;
+	}
+
+	const float Distance = FVector::Dist2D(
+		OwnerActor->GetActorLocation(), TargetActor->GetActorLocation());
+	const float MinimumRange = FMath::Max(0.0f, CommonData->MinimumRange);
+	const float MaximumRange = FMath::Max(MinimumRange, CommonData->ActivationRange);
+	return Distance >= MinimumRange && Distance <= MaximumRange;
+}
+
+float USGBossCombatComponent::GetRemainingCooldown(
+	const ESGBossAttackType AttackType) const
+{
+	const UWorld* World = GetWorld();
+	if (!World)
+	{
+		return 0.0f;
+	}
+
+	const float* NextAllowedTime = NextAttackAllowedTimes.Find(AttackType);
+	return NextAllowedTime
+		? FMath::Max(0.0f, *NextAllowedTime - World->GetTimeSeconds())
+		: 0.0f;
+}
+
+const FSGAttackCommonData* USGBossCombatComponent::FindCommonAttackData(
+	const ESGBossAttackType AttackType) const
+{
+	switch (AttackType)
+	{
+	case ESGBossAttackType::SingleSlam:
+		return &SingleSlamData.Common;
+
+	default:
+		return nullptr;
+	}
+}
+
+bool USGBossCombatComponent::ValidateAttackData(
+	const ESGBossAttackType AttackType) const
+{
+	const FSGAttackCommonData* CommonData = FindCommonAttackData(AttackType);
+	if (!CommonData || CommonData->ActivationRange < 0.0f
+		|| CommonData->MinimumRange < 0.0f || CommonData->Damage < 0.0f)
+	{
+		UE_LOG(LogTemp, Error, TEXT("[BossCombat] Invalid common attack data. Type=%d."),
+			static_cast<int32>(AttackType));
+		return false;
+	}
+
+	if (AttackType == ESGBossAttackType::SingleSlam
+		&& (SingleSlamData.HitRadius <= 0.0f
+			|| SingleSlamData.FallbackWindupTime <= 0.0f))
+	{
+		UE_LOG(LogTemp, Error, TEXT("[BossCombat] Invalid Single Slam data."));
+		return false;
+	}
+
+	return true;
 }
 
 void USGBossCombatComponent::UpdateTargetTracking(const float DeltaTime)
 {
 	AActor* OwnerActor = GetOwner();
-	if (!IsValid(OwnerActor) || !IsValid(CurrentTarget))
+	const FSGAttackCommonData* CommonData = FindCommonAttackData(CurrentAttackType);
+	if (!IsValid(OwnerActor) || !IsValid(CurrentTarget) || !CommonData)
 	{
 		FinishCurrentAttack(false);
 		return;
@@ -95,10 +235,14 @@ void USGBossCombatComponent::UpdateTargetTracking(const float DeltaTime)
 
 	FVector Direction = CurrentTarget->GetActorLocation() - OwnerActor->GetActorLocation();
 	Direction.Z = 0.0f;
-	if (Direction.IsNearlyZero()) return;
+	if (Direction.IsNearlyZero())
+	{
+		return;
+	}
 
 	const FRotator NewRotation = FMath::RInterpConstantTo(
-		OwnerActor->GetActorRotation(), Direction.Rotation(), DeltaTime, TrackingRotationSpeed);
+		OwnerActor->GetActorRotation(), Direction.Rotation(), DeltaTime,
+		FMath::Max(0.0f, CommonData->TrackingRotationSpeed));
 	OwnerActor->SetActorRotation(FRotator(0.0f, NewRotation.Yaw, 0.0f));
 }
 
@@ -112,16 +256,22 @@ void USGBossCombatComponent::LockAttackDirection()
 	}
 
 	LockedAttackDirection = OwnerActor->GetActorForwardVector().GetSafeNormal2D();
+	if (LockedAttackDirection.IsNearlyZero())
+	{
+		LockedAttackDirection = FVector::ForwardVector;
+	}
+
 	AttackState = ESGBossAttackState::DirectionLocked;
-	BP_OnSingleSlamDirectionLocked();
-	UE_LOG(LogTemp, Log, TEXT("[BossCombat] Single Slam direction locked."));
+	BP_OnAttackDirectionLocked(CurrentAttackType);
+	UE_LOG(LogTemp, Log, TEXT("[BossCombat] Attack direction locked. Type=%d."),
+		static_cast<int32>(CurrentAttackType));
 }
 
 void USGBossCombatComponent::ExecuteSingleSlamHit()
 {
 	AActor* OwnerActor = GetOwner();
 	UWorld* World = GetWorld();
-	if (!IsValid(OwnerActor) || !World)
+	if (!IsValid(OwnerActor) || !World || !IsValid(CurrentTarget))
 	{
 		FinishCurrentAttack(false);
 		return;
@@ -129,47 +279,64 @@ void USGBossCombatComponent::ExecuteSingleSlamHit()
 
 	bHitExecuted = true;
 	AttackState = ESGBossAttackState::Hitting;
+
 	const FVector HitCenter = OwnerActor->GetActorLocation()
-		+ LockedAttackDirection * SingleSlamForwardOffset;
+		+ LockedAttackDirection * FMath::Max(0.0f, SingleSlamData.ForwardOffset);
+	const float HitRadius = FMath::Max(1.0f, SingleSlamData.HitRadius);
 
 	FCollisionObjectQueryParams ObjectQueryParams;
 	ObjectQueryParams.AddObjectTypesToQuery(ECC_Pawn);
 	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(SGBossSingleSlam), false, OwnerActor);
 	TArray<FOverlapResult> Results;
 	World->OverlapMultiByObjectType(Results, HitCenter, FQuat::Identity,
-		ObjectQueryParams, FCollisionShape::MakeSphere(SingleSlamHitRadius), QueryParams);
+		ObjectQueryParams, FCollisionShape::MakeSphere(HitRadius), QueryParams);
 
-	TSet<AActor*> DamagedActors;
+	bool bTargetHit = false;
 	for (const FOverlapResult& Result : Results)
 	{
-		AActor* HitActor = Result.GetActor();
-		if (!IsValid(HitActor) || HitActor == OwnerActor || DamagedActors.Contains(HitActor)) continue;
+		if (Result.GetActor() != CurrentTarget)
+		{
+			continue;
+		}
 
-		DamagedActors.Add(HitActor);
-		APawn* OwnerPawn = Cast<APawn>(OwnerActor);
-		UGameplayStatics::ApplyDamage(HitActor, SingleSlamDamage,
+		const APawn* OwnerPawn = Cast<APawn>(OwnerActor);
+		UGameplayStatics::ApplyDamage(CurrentTarget, SingleSlamData.Common.Damage,
 			OwnerPawn ? OwnerPawn->GetController() : nullptr, OwnerActor, nullptr);
+		bTargetHit = true;
 		UE_LOG(LogTemp, Log, TEXT("[BossCombat] Single Slam hit %s for %.1f damage."),
-			*GetNameSafe(HitActor), SingleSlamDamage);
+			*GetNameSafe(CurrentTarget), SingleSlamData.Common.Damage);
+		break;
 	}
 
 	if (bDrawDebugAttack)
 	{
-		DrawDebugSphere(World, HitCenter, SingleSlamHitRadius, 24,
-			DamagedActors.IsEmpty() ? FColor::Red : FColor::Green,
-			false, 1.5f, 0, 4.0f);
+		DrawDebugSphere(World, HitCenter, HitRadius, 24,
+			bTargetHit ? FColor::Green : FColor::Red, false, 1.5f, 0, 4.0f);
 	}
 
-	BP_OnSingleSlamHit();
+	BP_OnAttackHit(CurrentAttackType);
 	AttackState = ESGBossAttackState::Recovering;
 }
 
 void USGBossCombatComponent::FinishCurrentAttack(const bool bSucceeded)
 {
+	const ESGBossAttackType FinishedAttackType = CurrentAttackType;
+	const FSGAttackCommonData* CommonData = FindCommonAttackData(FinishedAttackType);
+	if (bSucceeded && CommonData)
+	{
+		if (const UWorld* World = GetWorld())
+		{
+			NextAttackAllowedTimes.FindOrAdd(FinishedAttackType) =
+				World->GetTimeSeconds() + FMath::Max(0.0f, CommonData->Cooldown);
+		}
+	}
+
 	SetComponentTickEnabled(false);
 	CurrentTarget = nullptr;
 	AttackElapsedTime = 0.0f;
 	bHitExecuted = false;
 	AttackState = ESGBossAttackState::Idle;
-	OnBossAttackFinished.Broadcast(bSucceeded);
+	CurrentAttackType = ESGBossAttackType::None;
+
+	OnBossAttackFinished.Broadcast(FinishedAttackType, bSucceeded);
 }
