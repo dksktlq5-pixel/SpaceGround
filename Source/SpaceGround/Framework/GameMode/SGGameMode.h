@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/GameMode.h"
 #include "RoundManagerComponent/RoundManagerComponent.h"
+#include "SpaceGround/CommonData/SGGameStateTypes.h"
 #include "SGGameMode.generated.h"
 
 /**
@@ -32,5 +33,7 @@ private:
 	
 public:
 	void HandleRoundChanged(int32 NewRoundIndex);
+	
+	void HandleGameStateTypesChanged(EGameStateTypes NewGameStateTypes);
 	
 };

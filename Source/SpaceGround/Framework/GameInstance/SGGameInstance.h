@@ -31,8 +31,6 @@ private:
 public:
 	UPROPERTY(BlueprintReadOnly)
 	TMap<EDamageElement, float> TotalDamageAmounts; // 모든 라운드 합산 속성별 데미지
-
-	void Initialize_TotalDamageAmounts();
 	
 	UFUNCTION(BlueprintCallable)
 	void Add_RoundDamageAmount(const TMap<EDamageElement, float>& RoundDamageAmount);

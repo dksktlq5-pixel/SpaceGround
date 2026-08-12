@@ -6,20 +6,11 @@ void USGGameInstance::Init()
 {
 	Super::Init();
 	
-	Initialize_TotalDamageAmounts();
 }
 
 void USGGameInstance::Shutdown()
 {
 	Super::Shutdown();
-}
-
-void USGGameInstance::Initialize_TotalDamageAmounts()
-{
-	for (auto& Pair : TotalDamageAmounts)
-	{
-		TotalDamageAmounts.FindOrAdd(Pair.Key) = 0.f;
-	}
 }
 
 // todo : 라운드 종료 시 호출
