@@ -4,14 +4,14 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
-#include "SpaceGround/CommonData/SGGameStateTypes.h"
+#include "SpaceGround/CommonData/SGGamePhase.h"
 #include "RoundManagerComponent.generated.h"
 /*
  * 라운드 별 차이 반영하는 클래스
  */
 
 DECLARE_MULTICAST_DELEGATE_OneParam(FOnRoundChanged, int32 NewRoundindex);
-DECLARE_MULTICAST_DELEGATE_OneParam(FOnGameStateTypesChanged, EGameStateTypes NewGameStateTypes); // 매크로가 만들어준 클래스
+DECLARE_MULTICAST_DELEGATE_OneParam(FOnGamePhaseChanged, EGamePhase NewGamePhase); // 델리게이트는 매크로가 만들어준 "클래스"
 
 UCLASS(ClassGroup=(Custom), meta=(BlueprintSpawnableComponent))
 class SPACEGROUND_API URoundManagerComponent : public UActorComponent
@@ -34,11 +34,12 @@ public:
 	FOnRoundChanged OnRoundChanged;
 	
 	int32 CurrentRoundIndex = 0;
+	int32 GetCurrentRoundIndex() const {  return CurrentRoundIndex; };
 	
-#pragma region GameStateTypes Timer
+#pragma region GamePhase Timer
 
 private:
-	FTimerHandle GameStateTypesTimerHandle;
+	FTimerHandle GamePhaseTimerHandle;
 	
 	void BeginExploration();
 	void BeginPreparation();
@@ -48,7 +49,7 @@ private:
 public:
 	void EndCombat();
 	
-	FOnGameStateTypesChanged OnGameStateTypesChanged;
+	FOnGamePhaseChanged OnGamePhaseChanged;
 	
 	UPROPERTY(BlueprintReadWrite, EditAnywhere)
 	float ExplorationTime = 600.f;

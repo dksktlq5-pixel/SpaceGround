@@ -5,7 +5,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/GameMode.h"
 #include "RoundManagerComponent/RoundManagerComponent.h"
-#include "SpaceGround/CommonData/SGGameStateTypes.h"
+#include "SpaceGround/CommonData/SGGamePhase.h"
 #include "SGGameMode.generated.h"
 
 /**
@@ -34,6 +34,15 @@ private:
 public:
 	void HandleRoundChanged(int32 NewRoundIndex);
 	
-	void HandleGameStateTypesChanged(EGameStateTypes NewGameStateTypes);
+	void HandleGamePhaseChanged(EGamePhase NewGamePhase);
 	
+#pragma region CheckGameResult
+private:
+	
+
+public:
+	void CheckGameResult();
+
+	
+#pragma endregion
 };

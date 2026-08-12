@@ -16,8 +16,8 @@ ASGGameMode::ASGGameMode()
 			&ASGGameMode::HandleRoundChanged);
 		// 델리게이트 객체에 접근.이벤트 발생 시 콜백 함수 바인딩(이 객체에서 실행, 실행할 함수 주소) -> 구독!!!!
 		
-		RoundManagerComponent->OnGameStateTypesChanged.AddUObject(this,
-			&ASGGameMode::HandleGameStateTypesChanged);
+		RoundManagerComponent->OnGamePhaseChanged.AddUObject(this,
+			&ASGGameMode::HandleGamePhaseChanged);
 	}	
 }
 
@@ -28,6 +28,7 @@ void ASGGameMode::BeginPlay()
 
 void ASGGameMode::HandleRoundChanged(int32 NewRoundIndex) // 라운드 델리게이트의 파라미터와 동일한 int32 타입
 {
+	
 	if (ASGGameState* GS = GetGameState<ASGGameState>())
 	{
 		GS->CurrentRoundIndex_GameState = NewRoundIndex;
@@ -41,10 +42,15 @@ void ASGGameMode::HandleRoundChanged(int32 NewRoundIndex) // 라운드 델리게
 	}
 }
 
-void ASGGameMode::HandleGameStateTypesChanged(EGameStateTypes NewGameStateTypes)
+void ASGGameMode::HandleGamePhaseChanged(EGamePhase NewGamePhase)
 {
 	if (ASGGameState* GS = GetGameState<ASGGameState>())
 	{
-		GS->GameStateTypes = NewGameStateTypes;
+		GS->GamePhase = NewGamePhase;
 	}
-} 
+}
+
+void ASGGameMode::CheckGameResult()
+{
+	// 게임오버일 때 return 
+}
