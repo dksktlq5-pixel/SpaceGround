@@ -9,11 +9,6 @@
 ASGGameMode::ASGGameMode()
 {
 	RoundManagerComponent = CreateDefaultSubobject<URoundManagerComponent>(TEXT("RoundManagerComponent"));
-}
-
-void ASGGameMode::BeginPlay()
-{
-	Super::BeginPlay();
 	
 	if (RoundManagerComponent)
 	{
@@ -24,6 +19,11 @@ void ASGGameMode::BeginPlay()
 		RoundManagerComponent->OnGameStateTypesChanged.AddUObject(this,
 			&ASGGameMode::HandleGameStateTypesChanged);
 	}	
+}
+
+void ASGGameMode::BeginPlay()
+{
+	Super::BeginPlay();
 }
 
 void ASGGameMode::HandleRoundChanged(int32 NewRoundIndex) // 라운드 델리게이트의 파라미터와 동일한 int32 타입
@@ -47,4 +47,4 @@ void ASGGameMode::HandleGameStateTypesChanged(EGameStateTypes NewGameStateTypes)
 	{
 		GS->GameStateTypes = NewGameStateTypes;
 	}
-}
+} 
