@@ -61,8 +61,27 @@ void ASGBossAIController::OnPossess(APawn* InPawn)
 		return;
 	}
 
+	TargetAcquisitionAttempts = 0;
+	GetWorldTimerManager().SetTimer(
+		TargetAcquisitionTimerHandle,
+		this,
+		&ASGBossAIController::TryAcquirePlayerTarget,
+		TargetAcquisitionInterval,
+		true,
+		0.0f
+	);
+}
 
-	TryAcquirePlayerTarget();
+void ASGBossAIController::OnUnPossess()
+{
+	StopTargetAcquisition();
+	Super::OnUnPossess();
+}
+
+void ASGBossAIController::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	StopTargetAcquisition();
+	Super::EndPlay(EndPlayReason);
 }
 
 void ASGBossAIController::TryAcquirePlayerTarget()
@@ -72,12 +91,23 @@ void ASGBossAIController::TryAcquirePlayerTarget()
 
 	if (!IsValid(PlayerPawn) || !Blackboard)
 	{
-		
-		TargetAcquisitionTimerHandle =
-			GetWorldTimerManager().SetTimerForNextTick(
-			this,
-			&ASGBossAIController::TryAcquirePlayerTarget
-		);
+		++TargetAcquisitionAttempts;
+		if (TargetAcquisitionAttempts >= MaxTargetAcquisitionAttempts)
+		{
+			UE_LOG(LogTemp, Error,
+				TEXT("[BossAI] Failed to acquire Player Pawn or Blackboard within %.1f seconds."),
+				TargetAcquisitionInterval * MaxTargetAcquisitionAttempts);
+			StopTargetAcquisition();
+		}
+		return;
+	}
+
+	if (Blackboard->GetKeyID(TargetActorKeyName) == FBlackboard::InvalidKey)
+	{
+		UE_LOG(LogTemp, Error,
+			TEXT("[BossAI] Blackboard key '%s' does not exist."),
+			*TargetActorKeyName.ToString());
+		StopTargetAcquisition();
 		return;
 	}
 
@@ -85,6 +115,7 @@ void ASGBossAIController::TryAcquirePlayerTarget()
 		TargetActorKeyName,
 		PlayerPawn
 	);
+	StopTargetAcquisition();
 
 	UE_LOG(
 		LogTemp,
@@ -93,4 +124,9 @@ void ASGBossAIController::TryAcquirePlayerTarget()
 		*GetNameSafe(GetPawn()),
 		*GetNameSafe(PlayerPawn)
 	);
+}
+
+void ASGBossAIController::StopTargetAcquisition()
+{
+	GetWorldTimerManager().ClearTimer(TargetAcquisitionTimerHandle);
 }
