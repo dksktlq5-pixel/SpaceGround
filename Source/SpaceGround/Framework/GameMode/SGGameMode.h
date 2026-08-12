@@ -38,7 +38,10 @@ public:
 	
 #pragma region CheckGameResult
 private:
+	bool bIsGameEnded = false;
 	
+	bool IsBossDefeated() const; // 아직 없는 시스템에 대한 의존성 격리 목적 + 가독성
+	bool AreAllPlayersDead() const;
 
 public:
 	void CheckGameResult();
