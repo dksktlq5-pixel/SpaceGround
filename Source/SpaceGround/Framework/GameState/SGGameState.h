@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/GameState.h"
 #include "SpaceGround/CommonData/SGDamageTypes.h"
+#include "SpaceGround/CommonData/SGGameStateTypes.h"
 #include "SGGameState.generated.h"
 
 /**
@@ -33,6 +34,12 @@ public:
 	
 	UFUNCTION()
 	void OnRep_CurrentRoundIndex_GameState();
+	
+	UPROPERTY(ReplicatedUsing = OnRep_GameStateTypes, BlueprintReadOnly)
+	EGameStateTypes GameStateTypes = EGameStateTypes::None;
+	
+	UFUNCTION()
+	void OnRep_GameStateTypes();
 
 public:
 #pragma region Count Round_DamageAmount

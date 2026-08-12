@@ -9,18 +9,21 @@
 ASGGameMode::ASGGameMode()
 {
 	RoundManagerComponent = CreateDefaultSubobject<URoundManagerComponent>(TEXT("RoundManagerComponent"));
-}
-
-void ASGGameMode::BeginPlay()
-{
-	Super::BeginPlay();
 	
 	if (RoundManagerComponent)
 	{
 		RoundManagerComponent->OnRoundChanged.AddUObject(this,
 			&ASGGameMode::HandleRoundChanged);
 		// 델리게이트 객체에 접근.이벤트 발생 시 콜백 함수 바인딩(이 객체에서 실행, 실행할 함수 주소) -> 구독!!!!
-	}
+		
+		RoundManagerComponent->OnGameStateTypesChanged.AddUObject(this,
+			&ASGGameMode::HandleGameStateTypesChanged);
+	}	
+}
+
+void ASGGameMode::BeginPlay()
+{
+	Super::BeginPlay();
 }
 
 void ASGGameMode::HandleRoundChanged(int32 NewRoundIndex) // 라운드 델리게이트의 파라미터와 동일한 int32 타입
@@ -37,3 +40,11 @@ void ASGGameMode::HandleRoundChanged(int32 NewRoundIndex) // 라운드 델리게
 		GS->Set_Round_DamageAmounts_Zero();
 	}
 }
+
+void ASGGameMode::HandleGameStateTypesChanged(EGameStateTypes NewGameStateTypes)
+{
+	if (ASGGameState* GS = GetGameState<ASGGameState>())
+	{
+		GS->GameStateTypes = NewGameStateTypes;
+	}
+} 
