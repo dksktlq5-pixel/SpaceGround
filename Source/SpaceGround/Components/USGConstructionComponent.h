@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
@@ -9,6 +9,7 @@
 #include "USGConstructionComponent.generated.h"
 
 class AActor;
+class APowerCore;
 class UCameraComponent;
 class UDataTable;
 class USGResourceInventoryComponent;
@@ -71,6 +72,10 @@ public:
 
 protected:
     virtual void BeginPlay() override;
+    
+    virtual void EndPlay(
+    const EEndPlayReason::Type EndPlayReason
+) override;
 
     virtual void TickComponent(
         float DeltaTime,
@@ -184,6 +189,12 @@ public:
     {
         return bSelectedRequiresPower;
     }
+
+    UFUNCTION(BlueprintPure, Category = "Construction|Limit")
+    int32 GetPlacedStructureCount(FName StructureRowName) const;
+
+    UFUNCTION(BlueprintPure, Category = "Construction|Limit")
+    int32 GetSelectedStructureRemainingCount() const;
 
 protected:
     // ─────────────────────────────────────────────
@@ -355,6 +366,24 @@ protected:
         )
     )
     float RotationStep = 15.0f;
+    
+    /**
+ * 건설 모드 Toggle 최소 입력 간격.
+ *
+ * Preview Actor 생성/숨김, Blueprint 이벤트 등이
+ * 한순간에 반복되는 것을 방지한다.
+ */
+    UPROPERTY(
+        EditAnywhere,
+        BlueprintReadOnly,
+        Category = "Construction|Input",
+        meta = (
+            ClampMin = "0.0",
+            ClampMax = "1.0",
+            Units = "s"
+        )
+    )
+    float BuildModeToggleInterval = 0.12f;
 
 public:
     // ─────────────────────────────────────────────
@@ -382,6 +411,17 @@ private:
     )
     ESGBuildModeState BuildModeState =
         ESGBuildModeState::Inactive;
+
+    /**
+     * Enter/Exit의 Blueprint Event 또는 Delegate 실행 도중
+     * 다시 Toggle이 호출되는 것을 차단한다.
+     */
+    bool bIsChangingBuildMode = false;
+
+    /**
+     * 마지막으로 ToggleBuildMode가 정상 처리된 시간.
+     */
+    float LastBuildModeToggleTime = -1.0f;
 
 private:
     // ─────────────────────────────────────────────
@@ -416,6 +456,24 @@ private:
         Category = "Construction|Selected"
     )
     bool bSelectedRequiresPower = false;
+
+    UPROPERTY(
+        VisibleInstanceOnly,
+        Category = "Construction|Selected"
+    )
+    bool bSelectedRequiresPowerCore = false;
+
+    UPROPERTY(
+        VisibleInstanceOnly,
+        Category = "Construction|Selected"
+    )
+    float SelectedPowerConsumption = 0.0f;
+
+    UPROPERTY(
+        VisibleInstanceOnly,
+        Category = "Construction|Selected"
+    )
+    int32 SelectedMaxInstallCount = 1;
 
     UPROPERTY(
         VisibleInstanceOnly,
@@ -470,14 +528,21 @@ private:
     float CurrentPreviewYaw = 0.0f;
 
 private:
-    // ─────────────────────────────────────────────
     // 런타임 캐시
 
     UPROPERTY(Transient)
     TObjectPtr<AActor> PreviewActor;
 
+    /**
+     * 구조물마다 한 번 생성한 프리뷰를 저장한다.
+     * 1~5번 전환 시 Destroy/Spawn하지 않고 재사용한다.
+     */
     UPROPERTY(Transient)
-    TObjectPtr<UCameraComponent> CachedCamera;
+    TMap<FName, TObjectPtr<AActor>>
+    PreviewActorCache;
+
+    UPROPERTY(Transient)
+    TObjectPtr<UCameraComponent> CachedCamera;       
 
     UPROPERTY(Transient)
     TObjectPtr<USGResourceInventoryComponent>
@@ -488,6 +553,20 @@ private:
         Category = "Construction"
     )
     FSGPlacementResult CurrentPlacementResult;
+
+    /**
+     * 이 컴포넌트를 통해 실제 설치된 구조물 목록.
+     * 다른 플레이어가 설치한 구조물은 포함하지 않는다.
+     */
+    UPROPERTY(Transient)
+    TArray<TObjectPtr<AActor>> PlacedStructures;
+
+    /**
+     * 설치 Actor와 원본 DataTable Row의 대응 관계.
+     * MaxInstallCount 계산과 파괴 처리에 사용한다.
+     */
+    UPROPERTY(Transient)
+    TMap<TObjectPtr<AActor>, FName> PlacedStructureRows;
 
 private:
     // ─────────────────────────────────────────────
@@ -504,7 +583,12 @@ private:
 
     void SpawnPreviewActor();
 
-    void DestroyPreviewActor();
+    void SetPreviewActorActive(
+        AActor* InPreviewActor,
+        bool bActive
+    ) const;
+
+    void DestroyAllPreviewActors();
 
     void ConfigurePreviewActor(
         AActor* InPreviewActor
@@ -558,6 +642,35 @@ private:
     ) const;
 
     bool CheckResources() const;
+
+    bool CheckStructureLimit() const;
+
+    void RegisterPlacedStructure(
+        AActor* StructureActor,
+        FName StructureRowName
+    );
+
+    UFUNCTION()
+    void HandlePlacedStructureDestroyed(
+        AActor* DestroyedActor
+    );
+
+    void CompactPlacedStructures();
+
+    void GetOwnedPowerCores(
+        TArray<APowerCore*>& OutPowerCores
+    ) const;
+
+    APowerCore* FindPowerCoreForPlacement(
+        const FVector& PlacementLocation,
+        bool& bOutFoundCoreInRange
+    ) const;
+
+    ESGPlacementFailureReason GetPowerFailureReason(
+        const FVector& PlacementLocation
+    ) const;
+
+    void RecalculateOwnedPowerGrids() const;
     
     /**
  * 실제 설치된 구조물에 건설 중첩 판정 전용 Box를 생성한다.

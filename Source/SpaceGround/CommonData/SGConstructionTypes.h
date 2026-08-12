@@ -20,47 +20,50 @@ enum class ESGBuildModeState : uint8
 UENUM(BlueprintType)
 enum class ESGPlacementFailureReason : uint8
 {
-    None
-        UMETA(DisplayName = "None"),
+	None
+	UMETA(DisplayName = "None"),
 
-    NoSurface
-        UMETA(DisplayName = "No Surface"),
+	NoSurface
+	UMETA(DisplayName = "No Surface"),
 
-    InvalidSurface
-        UMETA(DisplayName = "Invalid Surface"),
+	InvalidSurface
+	UMETA(DisplayName = "Invalid Surface"),
 
-    TooSteep
-        UMETA(DisplayName = "Too Steep"),
+	TooSteep
+	UMETA(DisplayName = "Too Steep"),
 
-    Unsupported
-        UMETA(DisplayName = "Unsupported"),
+	Unsupported
+	UMETA(DisplayName = "Unsupported"),
 
-    EnvironmentOverlap
-        UMETA(DisplayName = "Environment Overlap"),
+	EnvironmentOverlap
+	UMETA(DisplayName = "Environment Overlap"),
 
-    StructureOverlap
-        UMETA(DisplayName = "Structure Overlap"),
+	StructureOverlap
+	UMETA(DisplayName = "Structure Overlap"),
 
-    PawnOverlap
-        UMETA(DisplayName = "Pawn Overlap"),
+	PawnOverlap
+	UMETA(DisplayName = "Pawn Overlap"),
 
-    OutOfPlacementRange
-        UMETA(DisplayName = "Out Of Placement Range"),
+	OutOfPlacementRange
+	UMETA(DisplayName = "Out Of Placement Range"),
 
-    OutsidePowerRange
-        UMETA(DisplayName = "Outside Power Range"),
+	MissingPowerCore
+	UMETA(DisplayName = "Missing Power Core"),
 
-    InsufficientPower
-        UMETA(DisplayName = "Insufficient Power"),
+	OutsidePowerRange
+	UMETA(DisplayName = "Outside Power Range"),
 
-    InsufficientResources
-        UMETA(DisplayName = "Insufficient Resources"),
+	InsufficientPower
+	UMETA(DisplayName = "Insufficient Power"),
 
-    StructureLimit
-        UMETA(DisplayName = "Structure Limit"),
+	InsufficientResources
+	UMETA(DisplayName = "Insufficient Resources"),
 
-    InvalidDefinition
-        UMETA(DisplayName = "Invalid Definition")
+	StructureLimit
+	UMETA(DisplayName = "Structure Limit"),
+
+	InvalidDefinition
+	UMETA(DisplayName = "Invalid Definition")
 };
 
 /**

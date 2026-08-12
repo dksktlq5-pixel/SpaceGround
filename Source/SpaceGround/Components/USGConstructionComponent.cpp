@@ -1,6 +1,7 @@
-﻿#include "USGConstructionComponent.h"
+#include "USGConstructionComponent.h"
 
 #include "../Structures/Base/StructureDefinition.h"
+#include "../Structures/Power/PowerCore.h"
 
 #include "Camera/CameraComponent.h"
 
@@ -98,6 +99,19 @@ void USGConstructionComponent::BeginPlay()
     }
 }
 
+void USGConstructionComponent::EndPlay(
+    const EEndPlayReason::Type EndPlayReason
+)
+{
+    /*
+     * 컴포넌트와 소유 Actor가 종료될 때
+     * 캐시에 저장한 프리뷰를 모두 정리한다.
+     */
+    DestroyAllPreviewActors();
+
+    Super::EndPlay(EndPlayReason);
+}
+
 void USGConstructionComponent::TickComponent(
     const float DeltaTime,
     const ELevelTick TickType,
@@ -158,13 +172,21 @@ USGConstructionComponent::FindOwnerCamera() const
 
 void USGConstructionComponent::EnterBuildMode()
 {
-    if (IsBuildModeActive())
+    /*
+     * 이미 건설 모드이거나 상태 변경 중이면
+     * 중복 실행하지 않는다.
+     */
+    if (IsBuildModeActive()
+        || bIsChangingBuildMode)
     {
         return;
     }
 
+    bIsChangingBuildMode = true;
+
     /*
-     * 선택된 구조물이 없으면 기본 구조물을 자동 선택한다.
+     * 선택된 구조물이 없으면
+     * 기본 구조물을 자동으로 선택한다.
      */
     if (!HasSelectedStructure()
         &&
@@ -191,14 +213,34 @@ void USGConstructionComponent::EnterBuildMode()
     BuildModeState =
         ESGBuildModeState::Previewing;
 
-    SetComponentTickEnabled(true);
-
-    if (SelectedPreviewClass)
+    /*
+     * 현재 선택된 구조물의 프리뷰를 가져온다.
+     *
+     * 이미 캐시에 있으면 재사용하고,
+     * 없을 때만 새로 생성한다.
+     */
+    if (SelectedPreviewClass
+        &&
+        !SelectedStructureRow.IsNone())
     {
         SpawnPreviewActor();
     }
 
+    if (IsValid(PreviewActor))
+    {
+        SetPreviewActorActive(
+            PreviewActor,
+            true
+        );
+    }
+
+    /*
+     * 건설 모드 진입 즉시
+     * 프리뷰 위치와 설치 가능 여부를 계산한다.
+     */
     UpdatePlacementPreview();
+
+    SetComponentTickEnabled(true);
 
     OnBuildModeEntered();
 
@@ -209,25 +251,45 @@ void USGConstructionComponent::EnterBuildMode()
         Log,
         TEXT(
             "Construction component entered build mode. "
-            "SelectedRow=%s"
+            "SelectedRow=%s Preview=%s"
         ),
-        *SelectedStructureRow.ToString()
+        *SelectedStructureRow.ToString(),
+        *GetNameSafe(PreviewActor)
     );
+
+    bIsChangingBuildMode = false;
 }
 
 void USGConstructionComponent::ExitBuildMode()
 {
-    if (!IsBuildModeActive())
+    /*
+     * 이미 종료됐거나 상태 변경 중이면
+     * 중복 실행하지 않는다.
+     */
+    if (!IsBuildModeActive()
+        || bIsChangingBuildMode)
     {
         return;
     }
+
+    bIsChangingBuildMode = true;
 
     BuildModeState =
         ESGBuildModeState::Inactive;
 
     SetComponentTickEnabled(false);
 
-    DestroyPreviewActor();
+    /*
+     * 현재 프리뷰는 파괴하지 않고 숨긴다.
+     * 다음 건설 모드 진입 시 다시 사용한다.
+     */
+    if (IsValid(PreviewActor))
+    {
+        SetPreviewActorActive(
+            PreviewActor,
+            false
+        );
+    }
 
     CurrentPlacementResult.Reset();
 
@@ -237,13 +299,55 @@ void USGConstructionComponent::ExitBuildMode()
 
     UE_LOG(
         LogTemp,
-        Log,
-        TEXT("Construction component exited build mode.")
+        Verbose,
+        TEXT(
+            "Construction component exited build mode. "
+            "Preview cached=%s"
+        ),
+        IsValid(PreviewActor)
+            ? TEXT("true")
+            : TEXT("false")
     );
+
+    bIsChangingBuildMode = false;
 }
 
 void USGConstructionComponent::ToggleBuildMode()
 {
+    /*
+     * Enter/Exit의 Blueprint Event 또는 Delegate 처리 도중
+     * 다시 Toggle이 호출되는 것을 막는다.
+     */
+    if (bIsChangingBuildMode)
+    {
+        return;
+    }
+
+    UWorld* World = GetWorld();
+
+    if (!World)
+    {
+        return;
+    }
+
+    const float CurrentTime =
+        World->GetRealTimeSeconds();
+
+    /*
+     * 같은 프레임 또는 지나치게 짧은 간격으로 들어온
+     * 반복 Toggle 입력을 차단한다.
+     */
+    if (LastBuildModeToggleTime >= 0.0f
+        &&
+        CurrentTime - LastBuildModeToggleTime
+            < BuildModeToggleInterval)
+    {
+        return;
+    }
+
+    LastBuildModeToggleTime =
+        CurrentTime;
+
     if (IsBuildModeActive())
     {
         ExitBuildMode();
@@ -385,6 +489,20 @@ bool USGConstructionComponent::ApplyStructureDefinition(
         return false;
     }
 
+    /*
+     * 현재 사용 중인 프리뷰를 파괴하지 않고 숨긴다.
+     * 해당 프리뷰는 PreviewActorCache에 남아 있다.
+     */
+    if (IsValid(PreviewActor))
+    {
+        SetPreviewActorActive(
+            PreviewActor,
+            false
+        );
+    }
+
+    PreviewActor = nullptr;
+
     SelectedStructureRow =
         StructureRowName;
 
@@ -392,11 +510,11 @@ bool USGConstructionComponent::ApplyStructureDefinition(
         Definition.StructureClass;
 
     /*
-     * PreviewClass가 없으면 실제 StructureClass를
-     * 임시 프리뷰로 사용한다.
+     * 전용 PreviewClass가 있으면 사용한다.
      *
-     * 실제 구조물 BeginPlay 로직까지 실행되므로
-     * 이후 전용 Preview BP로 분리하는 것이 권장된다.
+     * 없으면 실제 StructureClass를 임시 프리뷰로 사용하지만
+     * 실제 구조물 BeginPlay가 실행될 수 있으므로
+     * 전용 프리뷰 BP를 지정하는 것이 좋다.
      */
     if (Definition.PreviewClass)
     {
@@ -424,6 +542,21 @@ bool USGConstructionComponent::ApplyStructureDefinition(
 
     bSelectedRequiresPower =
         Definition.PowerData.bRequiresPower;
+
+    bSelectedRequiresPowerCore =
+        Definition.PowerData.bRequiresPowerCore;
+
+    SelectedPowerConsumption =
+        FMath::Max(
+            0.0f,
+            Definition.PowerData.PowerConsumption
+        );
+
+    SelectedMaxInstallCount =
+        FMath::Max(
+            1,
+            Definition.MaxInstallCount
+        );
 
     SelectedMaxSlopeDegrees =
         FMath::Clamp(
@@ -477,18 +610,22 @@ bool USGConstructionComponent::ApplyStructureDefinition(
             Definition.StructureSpacing
         );
 
-    CurrentPreviewYaw = 0.0f;
-
-    DestroyPreviewActor();
+    CurrentPreviewYaw =
+        0.0f;
 
     CurrentPlacementResult.Reset();
 
-    if (IsBuildModeActive())
+    /*
+     * 건설 모드일 때만 프리뷰를 활성화한다.
+     *
+     * 같은 Row의 프리뷰가 캐시에 존재하면 재사용하고,
+     * 최초 선택일 때만 새로 Spawn한다.
+     */
+    if (IsBuildModeActive()
+        &&
+        SelectedPreviewClass)
     {
-        if (SelectedPreviewClass)
-        {
-            SpawnPreviewActor();
-        }
+        SpawnPreviewActor();
 
         UpdatePlacementPreview();
     }
@@ -499,19 +636,26 @@ bool USGConstructionComponent::ApplyStructureDefinition(
 
     UE_LOG(
         LogTemp,
-        Log,
+        Verbose,
         TEXT(
             "Structure selected from DataTable: "
-            "Row=%s ID=%s RequiresPower=%s "
+            "Row=%s ID=%s RequiresPowerCore=%s "
+            "RequiresPower=%s PowerConsumption=%.1f "
+            "MaxInstallCount=%d "
             "MaxSlope=%.1f Extent=%s "
             "FullSupport=%s SupportDepth=%.1f "
             "Spacing=%.1f"
         ),
         *SelectedStructureRow.ToString(),
         *Definition.StructureID.ToString(),
+        bSelectedRequiresPowerCore
+            ? TEXT("true")
+            : TEXT("false"),
         bSelectedRequiresPower
             ? TEXT("true")
             : TEXT("false"),
+        SelectedPowerConsumption,
+        SelectedMaxInstallCount,
         SelectedMaxSlopeDegrees,
         *SelectedPlacementExtent.ToString(),
         bSelectedRequireFullGroundSupport
@@ -526,6 +670,12 @@ bool USGConstructionComponent::ApplyStructureDefinition(
 
 void USGConstructionComponent::ClearSelectedStructure()
 {
+    /*
+     * 선택 구조물을 완전히 초기화하는 경우에는
+     * 캐시된 모든 프리뷰도 제거한다.
+     */
+    DestroyAllPreviewActors();
+
     SelectedStructureRow =
         NAME_None;
 
@@ -539,6 +689,15 @@ void USGConstructionComponent::ClearSelectedStructure()
 
     bSelectedRequiresPower =
         false;
+
+    bSelectedRequiresPowerCore =
+        false;
+
+    SelectedPowerConsumption =
+        0.0f;
+
+    SelectedMaxInstallCount =
+        1;
 
     SelectedMaxSlopeDegrees =
         10.0f;
@@ -563,8 +722,6 @@ void USGConstructionComponent::ClearSelectedStructure()
 
     CurrentPreviewYaw =
         0.0f;
-
-    DestroyPreviewActor();
 
     CurrentPlacementResult.Reset();
 
@@ -891,18 +1048,292 @@ bool USGConstructionComponent::CheckResources() const
     );
 }
 
+int32 USGConstructionComponent::GetPlacedStructureCount(
+    const FName StructureRowName
+) const
+{
+    if (StructureRowName.IsNone())
+    {
+        return 0;
+    }
+
+    int32 Count = 0;
+
+    for (const TPair<TObjectPtr<AActor>, FName>& Pair :
+        PlacedStructureRows)
+    {
+        if (IsValid(Pair.Key.Get())
+            && Pair.Value == StructureRowName)
+        {
+            ++Count;
+        }
+    }
+
+    return Count;
+}
+
+int32 USGConstructionComponent::
+GetSelectedStructureRemainingCount() const
+{
+    if (SelectedStructureRow.IsNone())
+    {
+        return 0;
+    }
+
+    return FMath::Max(
+        0,
+        SelectedMaxInstallCount
+            - GetPlacedStructureCount(
+                SelectedStructureRow
+            )
+    );
+}
+
+bool USGConstructionComponent::CheckStructureLimit() const
+{
+    if (SelectedStructureRow.IsNone())
+    {
+        return false;
+    }
+
+    return GetPlacedStructureCount(
+        SelectedStructureRow
+    ) < SelectedMaxInstallCount;
+}
+
+void USGConstructionComponent::RegisterPlacedStructure(
+    AActor* StructureActor,
+    const FName StructureRowName
+)
+{
+    if (!IsValid(StructureActor)
+        || StructureRowName.IsNone())
+    {
+        return;
+    }
+
+    CompactPlacedStructures();
+
+    if (!PlacedStructures.Contains(StructureActor))
+    {
+        PlacedStructures.Add(StructureActor);
+    }
+
+    PlacedStructureRows.Add(
+        StructureActor,
+        StructureRowName
+    );
+
+    StructureActor->OnDestroyed.RemoveDynamic(
+        this,
+        &USGConstructionComponent::
+            HandlePlacedStructureDestroyed
+    );
+
+    StructureActor->OnDestroyed.AddDynamic(
+        this,
+        &USGConstructionComponent::
+            HandlePlacedStructureDestroyed
+    );
+}
+
+void USGConstructionComponent::
+HandlePlacedStructureDestroyed(
+    AActor* DestroyedActor
+)
+{
+    if (!DestroyedActor)
+    {
+        return;
+    }
+
+    PlacedStructures.Remove(DestroyedActor);
+    PlacedStructureRows.Remove(DestroyedActor);
+
+    RecalculateOwnedPowerGrids();
+
+    if (IsBuildModeActive())
+    {
+        UpdatePlacementPreview();
+    }
+}
+
+void USGConstructionComponent::CompactPlacedStructures()
+{
+    for (int32 Index = PlacedStructures.Num() - 1;
+        Index >= 0;
+        --Index)
+    {
+        AActor* StructureActor =
+            PlacedStructures[Index].Get();
+
+        if (IsValid(StructureActor))
+        {
+            continue;
+        }
+
+        PlacedStructureRows.Remove(StructureActor);
+        PlacedStructures.RemoveAtSwap(Index);
+    }
+
+    for (auto Iterator = PlacedStructureRows.CreateIterator();
+        Iterator;
+        ++Iterator)
+    {
+        if (!IsValid(Iterator.Key().Get()))
+        {
+            Iterator.RemoveCurrent();
+        }
+    }
+}
+
+void USGConstructionComponent::GetOwnedPowerCores(
+    TArray<APowerCore*>& OutPowerCores
+) const
+{
+    OutPowerCores.Reset();
+
+    const AActor* OwnerActor = GetOwner();
+
+    for (const TObjectPtr<AActor>& StructurePtr :
+        PlacedStructures)
+    {
+        APowerCore* PowerCore =
+            Cast<APowerCore>(StructurePtr.Get());
+
+        if (!IsValid(PowerCore))
+        {
+            continue;
+        }
+
+        if (PowerCore->GetOwner() != OwnerActor)
+        {
+            continue;
+        }
+
+        OutPowerCores.Add(PowerCore);
+    }
+}
+
+APowerCore* USGConstructionComponent::
+FindPowerCoreForPlacement(
+    const FVector& PlacementLocation,
+    bool& bOutFoundCoreInRange
+) const
+{
+    bOutFoundCoreInRange = false;
+
+    TArray<APowerCore*> PowerCores;
+    GetOwnedPowerCores(PowerCores);
+
+    APowerCore* BestPowerCore = nullptr;
+    float BestRemainingPower = -1.0f;
+
+    for (APowerCore* PowerCore : PowerCores)
+    {
+        if (!IsValid(PowerCore)
+            || !PowerCore->IsInsidePowerRange(
+                PlacementLocation
+            ))
+        {
+            continue;
+        }
+
+        bOutFoundCoreInRange = true;
+
+        const float RemainingPower =
+            PowerCore->GetRemainingPower();
+
+        if (RemainingPower + KINDA_SMALL_NUMBER
+                < SelectedPowerConsumption)
+        {
+            continue;
+        }
+
+        if (!BestPowerCore
+            || RemainingPower > BestRemainingPower)
+        {
+            BestPowerCore = PowerCore;
+            BestRemainingPower = RemainingPower;
+        }
+    }
+
+    return BestPowerCore;
+}
+
+ESGPlacementFailureReason
+USGConstructionComponent::GetPowerFailureReason(
+    const FVector& PlacementLocation
+) const
+{
+    if (!bSelectedRequiresPowerCore
+        && !bSelectedRequiresPower)
+    {
+        return ESGPlacementFailureReason::None;
+    }
+
+    TArray<APowerCore*> PowerCores;
+    GetOwnedPowerCores(PowerCores);
+
+    if (PowerCores.IsEmpty())
+    {
+        return ESGPlacementFailureReason::MissingPowerCore;
+    }
+
+    /*
+     * 코어 존재만 요구하고 실제 전력은 사용하지 않는 구조물.
+     */
+    if (!bSelectedRequiresPower)
+    {
+        return ESGPlacementFailureReason::None;
+    }
+
+    bool bFoundCoreInRange = false;
+
+    if (FindPowerCoreForPlacement(
+        PlacementLocation,
+        bFoundCoreInRange
+    ))
+    {
+        return ESGPlacementFailureReason::None;
+    }
+
+    return bFoundCoreInRange
+        ? ESGPlacementFailureReason::InsufficientPower
+        : ESGPlacementFailureReason::OutsidePowerRange;
+}
+
+void USGConstructionComponent::
+RecalculateOwnedPowerGrids() const
+{
+    TArray<APowerCore*> PowerCores;
+    GetOwnedPowerCores(PowerCores);
+
+    /**
+     * APowerCore::RecalculatePowerGrid()가
+     * 같은 소유자의 전체 전력망을 한 번에 계산하므로
+     * 유효한 코어 하나에서만 호출한다.
+     */
+    for (APowerCore* PowerCore : PowerCores)
+    {
+        if (!IsValid(PowerCore))
+        {
+            continue;
+        }
+
+        PowerCore->RecalculatePowerGrid();
+        break;
+    }
+}
+
 bool USGConstructionComponent::
 CheckPowerRequirement_Implementation(
     const FVector& PlacementLocation
 ) const
 {
-    /*
-     * 비전력 구조물은 항상 통과한다.
-     *
-     * 전력 구조물은 PowerCore 시스템이 연결되기 전까지
-     * 설치할 수 없다.
-     */
-    return !bSelectedRequiresPower;
+    return GetPowerFailureReason(
+        PlacementLocation
+    ) == ESGPlacementFailureReason::None;
 }
 
 bool USGConstructionComponent::CalculatePlacementResult(
@@ -924,6 +1355,10 @@ bool USGConstructionComponent::CalculatePlacementResult(
 
     // ─────────────────────────────────────────────
     // 2. 카메라 기반 중앙 표면 Trace
+    //
+    // 설치 개수 제한보다 먼저 위치를 계산한다.
+    // 그래야 설치 제한에 걸려도 프리뷰가
+    // 월드 원점으로 초기화되지 않는다.
 
     FHitResult GroundHit;
 
@@ -941,20 +1376,11 @@ bool USGConstructionComponent::CalculatePlacementResult(
         GroundHit;
 
     // ─────────────────────────────────────────────
-    // 3. 설치 가능한 표면인지 검사
-
-    if (!IsValidGroundSurface(
-        GroundHit
-    ))
-    {
-        OutResult.FailureReason =
-            ESGPlacementFailureReason::InvalidSurface;
-
-        return false;
-    }
-
-    // ─────────────────────────────────────────────
-    // 4. 설치 Transform 계산
+    // 3. 설치 Transform 계산
+    //
+    // Trace가 성공했다면 이후 검사 결과와 관계없이
+    // 프리뷰가 현재 바라보는 위치를 유지할 수 있도록
+    // Transform부터 먼저 저장한다.
 
     const FVector PlacementLocation =
         GroundHit.ImpactPoint
@@ -977,7 +1403,34 @@ bool USGConstructionComponent::CalculatePlacementResult(
         );
 
     // ─────────────────────────────────────────────
-    // 5. 중앙 표면 경사 검사
+    // 4. 설치 가능한 표면인지 검사
+
+    if (!IsValidGroundSurface(
+        GroundHit
+    ))
+    {
+        OutResult.FailureReason =
+            ESGPlacementFailureReason::InvalidSurface;
+
+        return false;
+    }
+
+    // ─────────────────────────────────────────────
+    // 5. 설치 개수 제한
+    //
+    // 위치 계산 뒤에 검사하므로 제한에 걸려도
+    // 프리뷰는 현재 조준 위치에 남는다.
+
+    if (!CheckStructureLimit())
+    {
+        OutResult.FailureReason =
+            ESGPlacementFailureReason::StructureLimit;
+
+        return false;
+    }
+
+    // ─────────────────────────────────────────────
+    // 6. 중앙 표면 경사 검사
 
     if (!CheckSlope(
         GroundHit.ImpactNormal
@@ -990,7 +1443,7 @@ bool USGConstructionComponent::CalculatePlacementResult(
     }
 
     // ─────────────────────────────────────────────
-    // 6. 구조물 바닥 네 모서리 지지 검사
+    // 7. 구조물 바닥 네 모서리 지지 검사
 
     if (!CheckFullGroundSupport(
         OutResult.PlacementTransform
@@ -1003,7 +1456,7 @@ bool USGConstructionComponent::CalculatePlacementResult(
     }
 
     // ─────────────────────────────────────────────
-    // 7. 기존 구조물 중첩 검사
+    // 8. 기존 구조물 중첩 검사
 
     if (!CheckStructureOverlap(
         OutResult.PlacementTransform
@@ -1016,7 +1469,7 @@ bool USGConstructionComponent::CalculatePlacementResult(
     }
 
     // ─────────────────────────────────────────────
-    // 8. 자원 검사
+    // 9. 자원 검사
 
     if (!CheckResources())
     {
@@ -1028,23 +1481,42 @@ bool USGConstructionComponent::CalculatePlacementResult(
     }
 
     // ─────────────────────────────────────────────
-    // 9. 전력 검사
+    // 10. 전력 검사
 
+    const ESGPlacementFailureReason
+        PowerFailureReason =
+            GetPowerFailureReason(
+                PlacementLocation
+            );
+
+    if (PowerFailureReason !=
+        ESGPlacementFailureReason::None)
+    {
+        OutResult.FailureReason =
+            PowerFailureReason;
+
+        return false;
+    }
+
+    /*
+     * Blueprint에서 추가 전력 규칙을 확장할 수 있다.
+     */
     if (!CheckPowerRequirement(
         PlacementLocation
     ))
     {
         OutResult.FailureReason =
             ESGPlacementFailureReason::
-                OutsidePowerRange;
+                InsufficientPower;
 
         return false;
     }
 
     // ─────────────────────────────────────────────
-    // 10. 설치 가능
+    // 11. 설치 가능
 
-    OutResult.bCanPlace = true;
+    OutResult.bCanPlace =
+        true;
 
     OutResult.FailureReason =
         ESGPlacementFailureReason::None;
@@ -1076,16 +1548,16 @@ void USGConstructionComponent::UpdatePlacementPreview()
         NewResult;
 
     /*
-     * 유효한 바닥 Transform이 계산된 경우에만
-     * 프리뷰 위치를 변경한다.
+     * 실제로 지면 Trace에 성공한 경우에만
+     * 새 Transform을 프리뷰에 적용한다.
+     *
+     * Trace 이전 검사에서 실패하거나
+     * 표면을 찾지 못했다면 기본 Identity Transform을
+     * 적용하지 않고 기존 프리뷰 위치를 유지한다.
      */
     if (IsValid(PreviewActor)
         &&
-        CurrentPlacementResult.FailureReason !=
-            ESGPlacementFailureReason::NoSurface
-        &&
-        CurrentPlacementResult.FailureReason !=
-            ESGPlacementFailureReason::InvalidDefinition)
+        CurrentPlacementResult.GroundHit.bBlockingHit)
     {
         PreviewActor->SetActorTransform(
             CurrentPlacementResult.PlacementTransform
@@ -1110,12 +1582,58 @@ void USGConstructionComponent::SpawnPreviewActor()
     UWorld* World =
         GetWorld();
 
-    if (!World || !SelectedPreviewClass)
+    if (!World
+        ||
+        !SelectedPreviewClass
+        ||
+        SelectedStructureRow.IsNone())
     {
         return;
     }
 
-    DestroyPreviewActor();
+    /*
+     * 현재 프리뷰가 이미 유효하다면
+     * 다시 생성하지 않고 활성화한다.
+     */
+    if (IsValid(PreviewActor))
+    {
+        SetPreviewActorActive(
+            PreviewActor,
+            true
+        );
+
+        return;
+    }
+
+    /*
+     * 현재 선택된 Row의 프리뷰가 캐시에 있는지 확인한다.
+     */
+    if (TObjectPtr<AActor>* CachedPreview =
+        PreviewActorCache.Find(
+            SelectedStructureRow
+        ))
+    {
+        if (IsValid(CachedPreview->Get()))
+        {
+            PreviewActor =
+                CachedPreview->Get();
+
+            SetPreviewActorActive(
+                PreviewActor,
+                true
+            );
+
+            return;
+        }
+
+        /*
+         * 외부에서 파괴된 Actor가 캐시에 남아 있다면
+         * 잘못된 항목을 제거한다.
+         */
+        PreviewActorCache.Remove(
+            SelectedStructureRow
+        );
+    }
 
     FActorSpawnParameters SpawnParameters;
 
@@ -1141,6 +1659,8 @@ void USGConstructionComponent::SpawnPreviewActor()
 
     if (!IsValid(PreviewActor))
     {
+        PreviewActor = nullptr;
+
         UE_LOG(
             LogTemp,
             Warning,
@@ -1155,6 +1675,19 @@ void USGConstructionComponent::SpawnPreviewActor()
 
     ConfigurePreviewActor(
         PreviewActor
+    );
+
+    /*
+     * 최초 생성된 프리뷰를 현재 Row의 캐시에 저장한다.
+     */
+    PreviewActorCache.Add(
+        SelectedStructureRow,
+        PreviewActor
+    );
+
+    SetPreviewActorActive(
+        PreviewActor,
+        true
     );
 }
 
@@ -1194,17 +1727,56 @@ void USGConstructionComponent::ConfigurePreviewActor(
         );
     }
 }
-
-void USGConstructionComponent::DestroyPreviewActor()
+void USGConstructionComponent::SetPreviewActorActive(
+    AActor* InPreviewActor,
+    const bool bActive
+) const
 {
-    if (!IsValid(PreviewActor))
+    if (!IsValid(InPreviewActor))
     {
-        PreviewActor = nullptr;
-
         return;
     }
 
-    PreviewActor->Destroy();
+    InPreviewActor->SetActorHiddenInGame(
+        !bActive
+    );
+
+    /*
+     * 프리뷰는 활성 상태와 관계없이
+     * 실제 설치 충돌을 발생시키면 안 된다.
+     */
+    InPreviewActor->SetActorEnableCollision(
+        false
+    );
+
+    /*
+     * 숨겨진 프리뷰 Actor의 Tick을 중지한다.
+     */
+    InPreviewActor->SetActorTickEnabled(
+        bActive
+    );
+}
+
+void USGConstructionComponent::DestroyAllPreviewActors()
+{
+    /*
+     * Row별로 저장된 프리뷰를 전부 파괴한다.
+     */
+    for (
+        TPair<FName, TObjectPtr<AActor>>& PreviewPair
+        : PreviewActorCache
+    )
+    {
+        AActor* CachedPreview =
+            PreviewPair.Value.Get();
+
+        if (IsValid(CachedPreview))
+        {
+            CachedPreview->Destroy();
+        }
+    }
+
+    PreviewActorCache.Empty();
 
     PreviewActor = nullptr;
 }
@@ -1346,6 +1918,21 @@ bool USGConstructionComponent::TryPlaceSelectedStructure()
             return false;
         }
     }
+
+    /*
+     * 비용 차감까지 성공한 구조물만 설치 목록에 등록한다.
+     * 이후 파괴되면 HandlePlacedStructureDestroyed가 자동 호출된다.
+     */
+    RegisterPlacedStructure(
+        SpawnedStructure,
+        SelectedStructureRow
+    );
+
+    /*
+     * 파워코어 또는 전력 소비 구조물이 새로 생겼으므로
+     * 같은 소유자의 전력망을 즉시 다시 계산한다.
+     */
+    RecalculateOwnedPowerGrids();
 
     OnStructurePlaced.Broadcast(
         SpawnedStructure
