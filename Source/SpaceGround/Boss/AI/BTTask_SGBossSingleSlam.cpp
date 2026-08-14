@@ -11,14 +11,19 @@
 
 UBTTask_SGBossSingleSlam::UBTTask_SGBossSingleSlam()
 {
+	// BT Editor에서 보일 이름
 	NodeName = TEXT("Single Slam");
+	// Task마다 독립된 타이머와 참조를 가질 수 있게 인스턴스 생성
 	bCreateNodeInstance = true;
+	// Task 종료 시 OnTaskFinished 호출
 	bNotifyTaskFinished = true;
+	// Actor 타입 Blackboard Key만 선택 가능
 	TargetActorKey.AddObjectFilter(this,
 		GET_MEMBER_NAME_CHECKED(UBTTask_SGBossSingleSlam, TargetActorKey),
 		AActor::StaticClass());
 }
 
+// Blackboard의 타깃을 가져와 Single Slam 시작
 EBTNodeResult::Type UBTTask_SGBossSingleSlam::ExecuteTask(
 	UBehaviorTreeComponent& OwnerComp, uint8* NodeMemory)
 {
@@ -29,6 +34,7 @@ EBTNodeResult::Type UBTTask_SGBossSingleSlam::ExecuteTask(
 	AActor* TargetActor = Blackboard
 		? Cast<AActor>(Blackboard->GetValueAsObject(TargetActorKey.SelectedKeyName)) : nullptr;
 
+	// 보스나 타깃이 없으면 공격 시작 불가
 	if (!IsValid(BossCharacter) || !IsValid(TargetActor))
 	{
 		return EBTNodeResult::Failed;
@@ -43,11 +49,13 @@ EBTNodeResult::Type UBTTask_SGBossSingleSlam::ExecuteTask(
 	ActiveCombatComponent = CombatComponent;
 	ActiveOwnerComp = &OwnerComp;
 	PendingTarget = TargetActor;
+	// 공격이 끝날 때까지 BT Task를 InProgress 상태로 유지
 	CombatComponent->OnBossAttackFinished.AddUniqueDynamic(
 		this, &UBTTask_SGBossSingleSlam::HandleAttackFinished);
 
 	const float RemainingCooldown = CombatComponent->GetRemainingCooldown(
 		ESGBossAttackType::SingleSlam);
+	// 쿨다운이 남았으면 Timer로 기다렸다가 공격 시작
 	if (RemainingCooldown > 0.0f)
 	{
 		BossCharacter->GetWorldTimerManager().SetTimer(
@@ -82,6 +90,7 @@ void UBTTask_SGBossSingleSlam::OnTaskFinished(
 	Super::OnTaskFinished(OwnerComp, NodeMemory, TaskResult);
 }
 
+// 쿨다운이 끝난 뒤 보스와 타깃을 다시 확인하고 공격 시작
 void UBTTask_SGBossSingleSlam::TryStartPendingAttack()
 {
 	UBehaviorTreeComponent* OwnerComp = ActiveOwnerComp.Get();
@@ -105,6 +114,7 @@ void UBTTask_SGBossSingleSlam::TryStartPendingAttack()
 	}
 }
 
+// Task에서 사용한 이벤트와 Timer가 다음 실행에 남지 않게 정리
 void UBTTask_SGBossSingleSlam::CleanupTaskState(const bool bCancelAttack)
 {
 	if (IsValid(ActiveCombatComponent))
@@ -130,6 +140,7 @@ void UBTTask_SGBossSingleSlam::CleanupTaskState(const bool bCancelAttack)
 	PendingTarget.Reset();
 }
 
+// 공격 결과를 BT의 성공 또는 실패로 전달
 void UBTTask_SGBossSingleSlam::HandleAttackFinished(
 	const ESGBossAttackType AttackType,
 	const bool bSucceeded)
