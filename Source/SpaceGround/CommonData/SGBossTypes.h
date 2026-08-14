@@ -7,7 +7,7 @@
 
 class UAnimMontage;
 
-/** 보스가 선택하거나 실행할 수 있는 공격 종류. */
+//보스가 선택하거나 실행할 수 있는 공격 종류
 UENUM(BlueprintType)
 enum class ESGBossAttackType : uint8
 {
@@ -19,7 +19,7 @@ enum class ESGBossAttackType : uint8
 	VentReposition UMETA(DisplayName = "Vent Reposition")
 };
 
-/** 공격 실행 중 전투 컴포넌트의 공통 상태. */
+//공격 실행 중 전투 컴포넌트의 공통 상태
 UENUM(BlueprintType)
 enum class ESGBossAttackState : uint8
 {
@@ -30,7 +30,7 @@ enum class ESGBossAttackState : uint8
 	Recovering UMETA(DisplayName = "Recovering")
 };
 
-/** 여러 공격 패턴이 공유하는 설정. */
+//여러 공격 패턴이 공유하는 설정
 USTRUCT(BlueprintType)
 struct FSGAttackCommonData
 {
@@ -57,9 +57,13 @@ struct FSGAttackCommonData
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attack")
 	EDamageElement DamageElement = EDamageElement::normal;
 
-	/** Generic Notify 연결 단계에서 실행에 사용할 Montage. */
+	//Generic Notify 연결 단계에서 실행에 사용할 Montage
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attack")
 	TObjectPtr<UAnimMontage> Montage = nullptr;
+
+	//Montage가 없거나 재생에 실패했을 때 임시 타이머 공격을 허용한다(보스 공격구현이 끝나면 없애도됨)
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attack|Fallback")
+	bool bAllowTimerFallback = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Selection", meta = (ClampMin = "1", ClampMax = "5"))
 	int32 MinimumPhase = 1;
@@ -68,7 +72,7 @@ struct FSGAttackCommonData
 	float SelectionWeight = 1.0f;
 };
 
-/** Single Slam 전용 공간 판정 및 임시 타이밍 설정. */
+//Single Slam 전용 공간 판정 및 임시 타이밍 설정
 USTRUCT(BlueprintType)
 struct FSGSingleSlamAttackData
 {
@@ -80,14 +84,23 @@ struct FSGSingleSlamAttackData
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Single Slam", meta = (ClampMin = "0.0", Units = "cm"))
 	float ForwardOffset = 220.0f;
 
+	// 타격 Sphere의 기준으로 사용할 Socket 또는 Bone 이름
+	// 이름이 없거나 잘못됐으면 ForwardOffset 위치에서 판정
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Single Slam|Hit")
+	FName HitSocketName = NAME_None;
+
+	// Socket을 기준으로 판정 위치를 조금 옮길 때 사용
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Single Slam|Hit", meta = (Units = "cm"))
+	FVector HitSocketOffset = FVector::ZeroVector;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Single Slam", meta = (ClampMin = "1.0", Units = "cm"))
 	float HitRadius = 180.0f;
 
-	/** Montage Notify가 연결되기 전 사용하는 fallback 준비 시간. */
+	// 몽타주 없이 테스트할 때 공격 시작부터 타격까지 걸리는 시간
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Fallback Timing", meta = (ClampMin = "0.01", Units = "s"))
 	float FallbackWindupTime = 1.2f;
 
-	/** fallback 타격 시점보다 얼마 전에 방향을 고정할지 지정한다. */
+	// 테스트용 타격 시점보다 몇 초 먼저 방향을 고정할지 설정
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Fallback Timing", meta = (ClampMin = "0.0", Units = "s"))
 	float FallbackDirectionLockLeadTime = 0.3f;
 };
