@@ -186,6 +186,12 @@ protected:
 
 	void RefreshFireTimer();
 
+	/*
+	 * 유효한 타깃과 작동 가능 상태가 모두 충족될 때만
+	 * Tick과 사격 타이머를 활성화한다.
+	 */
+	void UpdateTurretActivity();
+
 	void TryFire();
 
 	/*

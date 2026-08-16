@@ -210,6 +210,22 @@ public:
 		return StructureState;
 	}
 
+	/** 전력망 재계산에서 DataTable을 반복 조회하지 않기 위한 캐시 Getter. */
+	float GetCachedPowerConsumption() const
+	{
+		return CachedPowerConsumption;
+	}
+
+	int32 GetCachedShutdownPriority() const
+	{
+		return CachedShutdownPriority;
+	}
+
+	bool RequiresCachedPower() const
+	{
+		return bCachedRequiresPower;
+	}
+
 
 protected:
 	// ─────────────────────────────────────────────
@@ -387,6 +403,13 @@ protected:
 		Category = "Structure|Initialization"
 	)
 	bool bIsInitialized = false;
+
+	/** InitializeStructure에서 한 번만 읽어 전력망 계산에 재사용한다. */
+	float CachedPowerConsumption = 0.0f;
+
+	int32 CachedShutdownPriority = 0;
+
+	bool bCachedRequiresPower = false;
 
 private:
 	/*

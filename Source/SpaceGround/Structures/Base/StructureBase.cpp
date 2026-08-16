@@ -82,11 +82,21 @@ bool AStructureBase::InitializeStructure()
 	MaxHP = FMath::Max(1.0f, Definition->MaxHP);
 	CurrentHP = MaxHP;
 
+	CachedPowerConsumption = FMath::Max(
+		0.0f,
+		Definition->PowerData.PowerConsumption
+	);
+	CachedShutdownPriority =
+		Definition->PowerData.ShutdownPriority;
+	bCachedRequiresPower =
+		Definition->PowerData.bRequiresPower;
+
 	/*
-	 * 발전기가 필요하지 않은 구조물은
-	 * 처음부터 전력이 공급된 것으로 처리한다.
+	 * 파워코어 또는 완전 독립형 구조물만 처음부터 켠다.
+	 * 코어 의존 구조물은 실제 설치 후 전력망 계산을 통해 켜진다.
 	 */
 	bIsPowered =
+		!Definition->PowerData.bRequiresPowerCore &&
 		!Definition->PowerData.bRequiresPower;
 
 	bIsStructureActive = true;
@@ -98,7 +108,7 @@ bool AStructureBase::InitializeStructure()
 
 	UE_LOG(
 		LogTemp,
-		Log,
+		Verbose,
 		TEXT(
 			"[StructureBase] 초기화 완료. "
 			"Actor=%s ID=%s Category=%d HP=%.1f "

@@ -14,14 +14,10 @@ void ABarricade::BeginPlay()
 	Super::BeginPlay();
 
 	/*
-	 * 바리케이드는 발전기 전력이 필요 없는
-	 * 순수 물리 구조물이다.
-	 *
-	 * DataTable 설정이 잘못되어 있어도
-	 * MVP에서는 전력 없이 작동하도록 보장한다.
+	 * 바리케이드는 전력을 소비하지 않지만 코어에 종속된다.
+	 * 코어 파괴 시 상태는 Unpowered가 되며,
+	 * 물리 Collision은 그대로 유지되어 장애물 역할은 계속한다.
 	 */
-	SetPowered(true);
-	SetStructureActive(true);
 
 
 	UE_LOG(

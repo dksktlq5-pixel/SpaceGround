@@ -1,5 +1,6 @@
-﻿#include "MachineGunTurret.h"
+#include "MachineGunTurret.h"
 
+#include "Components/SceneComponent.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/World.h"
 #include "Kismet/GameplayStatics.h"
@@ -7,7 +8,11 @@
 
 AMachineGunTurret::AMachineGunTurret()
 {
-	PrimaryActorTick.bCanEverTick = true;
+	/*
+	 * Tick 설정은 TurretBase가 담당한다.
+	 * 부모 생성자에서 기본 Tick은 비활성화되며,
+	 * 작동 가능 + 유효한 타깃 + 탄약 보유 시에만 켜진다.
+	 */
 }
 
 
@@ -15,26 +20,36 @@ void AMachineGunTurret::FireAtTarget(
 	AActor* Target
 )
 {
-	if (!IsValid(Target))
+	/*
+	 * 정상 경로에서는 TurretBase::TryFire()가 이미 검사하지만,
+	 * 전력 상태가 발사 직전에 바뀌는 경우도 안전하게 차단한다.
+	 */
+	if (!CanOperate() || !IsValid(Target))
 	{
 		return;
 	}
 
+	USceneComponent* Muzzle = GetMuzzlePoint();
 	UWorld* World = GetWorld();
 
-	if (!World)
+	if (!IsValid(Muzzle) || !World)
 	{
 		return;
 	}
 
 
 	const FVector TraceStart =
-		GetMuzzlePoint()->GetComponentLocation();
+		Muzzle->GetComponentLocation();
 
 	const FVector TraceDirection =
-		GetMuzzlePoint()
+		Muzzle
 			->GetForwardVector()
 			.GetSafeNormal();
+
+	if (TraceDirection.IsNearlyZero())
+	{
+		return;
+	}
 
 	const FVector TraceEnd =
 		TraceStart +
@@ -44,7 +59,12 @@ void AMachineGunTurret::FireAtTarget(
 
 	FHitResult HitResult;
 
-	FCollisionQueryParams QueryParams;
+	FCollisionQueryParams QueryParams(
+		SCENE_QUERY_STAT(MachineGunTurretFire),
+		false,
+		this
+	);
+
 	QueryParams.AddIgnoredActor(this);
 	QueryParams.bTraceComplex = false;
 

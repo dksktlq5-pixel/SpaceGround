@@ -63,6 +63,16 @@ public:
 	void ShutdownPowerGrid();
 
 	/**
+	 * 같은 소유자가 설치한 모든 비코어 구조물을
+	 * 전력 소비 여부와 관계없이 비활성화한다.
+	 */
+	UFUNCTION(
+		BlueprintCallable,
+		Category = "Power Core"
+	)
+	void ShutdownAllOwnedStructures();
+
+	/**
 	 * 해당 위치가 현재 파워코어의
 	 * 전력 공급 범위 안인지 검사한다.
 	 *
@@ -148,6 +158,9 @@ protected:
 	 */
 	bool LoadPowerCoreData();
 
+	/** 같은 프레임의 여러 요청을 다음 Tick 한 번으로 합친다. */
+	void RequestPowerGridRecalculation();
+
 	/**
 	 * 연결된 구조물이 파괴되었을 때 호출된다.
 	 *
@@ -218,7 +231,7 @@ protected:
 		BlueprintReadOnly,
 		Category = "Power Core|Debug"
 	)
-	bool bDrawDebugPowerRadius = true;
+	bool bDrawDebugPowerRadius = false;
 
 	/**
 	 * 디버그 구체가 유지되는 시간.
@@ -231,5 +244,8 @@ protected:
 		Category = "Power Core|Debug",
 		meta = (ClampMin = "0.0")
 	)
-	float DebugDrawDuration = 10.0f;
+	float DebugDrawDuration = 0.0f;
+
+	/** BeginPlay/파괴 이벤트의 중복 전력망 계산을 합치는 Timer. */
+	FTimerHandle PowerGridRecalculationTimerHandle;
 };

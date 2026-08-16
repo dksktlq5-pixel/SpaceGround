@@ -8,6 +8,7 @@
 ATurretBase::ATurretBase()
 {
 	PrimaryActorTick.bCanEverTick = true;
+	PrimaryActorTick.bStartWithTickEnabled = false;
 
 	YawPivot =
 		CreateDefaultSubobject<USceneComponent>(
@@ -53,10 +54,7 @@ void ATurretBase::BeginPlay()
 		return;
 	}
 
-	if (CanOperate())
-	{
-		StartFireTimer();
-	}
+	UpdateTurretActivity();
 }
 
 
@@ -66,11 +64,13 @@ void ATurretBase::Tick(float DeltaSeconds)
 
 	if (!CanOperate())
 	{
+		UpdateTurretActivity();
 		return;
 	}
 
 	if (!HasValidTarget())
 	{
+		UpdateTurretActivity();
 		return;
 	}
 
@@ -175,6 +175,8 @@ void ATurretBase::SetTargetActor(
 		*GetNameSafe(this),
 		*GetNameSafe(TargetActor)
 	);
+
+	UpdateTurretActivity();
 }
 
 
@@ -468,7 +470,9 @@ float ATurretBase::GetCurrentFireInterval() const
 
 void ATurretBase::StartFireTimer()
 {
-	if (!CanOperate())
+	if (!CanOperate()
+		|| !HasValidTarget()
+		|| CurrentAmmo <= 0)
 	{
 		return;
 	}
@@ -527,7 +531,9 @@ void ATurretBase::StopFireTimer()
 
 void ATurretBase::RefreshFireTimer()
 {
-	if (!CanOperate())
+	if (!CanOperate()
+		|| !HasValidTarget()
+		|| CurrentAmmo <= 0)
 	{
 		StopFireTimer();
 		return;
@@ -563,6 +569,11 @@ void ATurretBase::TryFire()
 
 	if (!CanFireAtTarget())
 	{
+		if (!HasValidTarget())
+		{
+			UpdateTurretActivity();
+		}
+
 		return;
 	}
 
@@ -583,6 +594,8 @@ void ATurretBase::TryFire()
 
 	if (CurrentAmmo <= 0)
 	{
+		UpdateTurretActivity();
+
 		UE_LOG(
 			LogTemp,
 			Warning,
@@ -615,7 +628,7 @@ void ATurretBase::RefillAmmo()
 		MaxAmmo
 	);
 
-	RefreshFireTimer();
+	UpdateTurretActivity();
 }
 
 
@@ -637,6 +650,8 @@ void ATurretBase::AddAmmo(int32 Amount)
 		CurrentAmmo,
 		MaxAmmo
 	);
+
+	UpdateTurretActivity();
 }
 
 
@@ -648,7 +663,20 @@ void ATurretBase::OnOperatingStateChanged(
 		bCanOperateNow
 	);
 
-	if (bCanOperateNow)
+	UpdateTurretActivity();
+}
+
+
+void ATurretBase::UpdateTurretActivity()
+{
+	const bool bShouldRun =
+		CanOperate() &&
+		HasValidTarget() &&
+		CurrentAmmo > 0;
+
+	SetActorTickEnabled(bShouldRun);
+
+	if (bShouldRun)
 	{
 		StartFireTimer();
 	}

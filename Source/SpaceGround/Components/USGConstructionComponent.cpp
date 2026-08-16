@@ -1,6 +1,7 @@
 #include "USGConstructionComponent.h"
 
 #include "../Structures/Base/StructureDefinition.h"
+#include "../Structures/Base/StructureBase.h"
 #include "../Structures/Power/PowerCore.h"
 
 #include "Camera/CameraComponent.h"
@@ -14,6 +15,28 @@
 #include "GameFramework/Pawn.h"
 
 #include "USGResourceInventoryComponent.h"
+
+namespace
+{
+    bool HasPlacementResultChanged(
+        const FSGPlacementResult& Left,
+        const FSGPlacementResult& Right
+    )
+    {
+        if (Left.bCanPlace != Right.bCanPlace
+            || Left.bHasValidTransform != Right.bHasValidTransform
+            || Left.FailureReason != Right.FailureReason)
+        {
+            return true;
+        }
+
+        return Left.bHasValidTransform
+            && !Left.PlacementTransform.Equals(
+                Right.PlacementTransform,
+                0.1f
+            );
+    }
+}
 
 USGConstructionComponent::USGConstructionComponent()
 {
@@ -129,6 +152,21 @@ void USGConstructionComponent::TickComponent(
         return;
     }
 
+    if (PreviewUpdateInterval > 0.0f)
+    {
+        PreviewUpdateAccumulator += DeltaTime;
+
+        if (PreviewUpdateAccumulator < PreviewUpdateInterval)
+        {
+            return;
+        }
+
+        PreviewUpdateAccumulator = FMath::Fmod(
+            PreviewUpdateAccumulator,
+            PreviewUpdateInterval
+        );
+    }
+
     UpdatePlacementPreview();
 }
 
@@ -213,6 +251,8 @@ void USGConstructionComponent::EnterBuildMode()
     BuildModeState =
         ESGBuildModeState::Previewing;
 
+    PreviewUpdateAccumulator = 0.0f;
+
     /*
      * 현재 선택된 구조물의 프리뷰를 가져온다.
      *
@@ -276,6 +316,8 @@ void USGConstructionComponent::ExitBuildMode()
 
     BuildModeState =
         ESGBuildModeState::Inactive;
+
+    PreviewUpdateAccumulator = 0.0f;
 
     SetComponentTickEnabled(false);
 
@@ -393,6 +435,27 @@ bool USGConstructionComponent::SelectStructureByRowName(
     }
 
     /*
+     * 킬존의 시작점은 파워코어다.
+     * 코어가 설치되기 전에는 다른 구조물의
+     * 선택·프리뷰 생성 자체를 차단한다.
+     */
+    if (StructureRowName != PowerCoreStructureRowName
+        && !HasOperationalPowerCore())
+    {
+        UE_LOG(
+            LogTemp,
+            Verbose,
+            TEXT(
+                "Structure selection locked until "
+                "PowerCore is placed. Row=%s"
+            ),
+            *StructureRowName.ToString()
+        );
+
+        return false;
+    }
+
+    /*
      * 이미 같은 구조물이 정상적으로 선택되어 있다면
      * DataTable 조회, Preview Destroy, Preview Spawn을
      * 다시 수행하지 않는다.
@@ -490,6 +553,43 @@ bool USGConstructionComponent::ApplyStructureDefinition(
     }
 
     /*
+     * 실제 StructureClass를 프리뷰로 사용하면 BeginPlay, Timer,
+     * 전력망, 터렛 및 함정 로직이 실행될 수 있다.
+     * 따라서 전용 PreviewClass가 없는 Row는 선택하지 않는다.
+     */
+    if (!Definition.PreviewClass)
+    {
+        UE_LOG(
+            LogTemp,
+            Warning,
+            TEXT(
+                "Structure Row '%s' has no PreviewClass. "
+                "A dedicated preview class is required."
+            ),
+            *StructureRowName.ToString()
+        );
+
+        return false;
+    }
+
+    if (Definition.PreviewClass->IsChildOf(
+        AStructureBase::StaticClass()
+    ))
+    {
+        UE_LOG(
+            LogTemp,
+            Warning,
+            TEXT(
+                "Structure Row '%s' uses a StructureBase child as "
+                "PreviewClass. Use a lightweight AActor preview BP."
+            ),
+            *StructureRowName.ToString()
+        );
+
+        return false;
+    }
+
+    /*
      * 현재 사용 중인 프리뷰를 파괴하지 않고 숨긴다.
      * 해당 프리뷰는 PreviewActorCache에 남아 있다.
      */
@@ -509,33 +609,7 @@ bool USGConstructionComponent::ApplyStructureDefinition(
     SelectedStructureClass =
         Definition.StructureClass;
 
-    /*
-     * 전용 PreviewClass가 있으면 사용한다.
-     *
-     * 없으면 실제 StructureClass를 임시 프리뷰로 사용하지만
-     * 실제 구조물 BeginPlay가 실행될 수 있으므로
-     * 전용 프리뷰 BP를 지정하는 것이 좋다.
-     */
-    if (Definition.PreviewClass)
-    {
-        SelectedPreviewClass =
-            Definition.PreviewClass;
-    }
-    else
-    {
-        SelectedPreviewClass =
-            Definition.StructureClass;
-
-        UE_LOG(
-            LogTemp,
-            Warning,
-            TEXT(
-                "Structure Row '%s' has no PreviewClass. "
-                "StructureClass will be used as preview."
-            ),
-            *StructureRowName.ToString()
-        );
-    }
+    SelectedPreviewClass = Definition.PreviewClass;
 
     SelectedResourceCosts =
         Definition.BuildCosts;
@@ -723,19 +797,30 @@ void USGConstructionComponent::ClearSelectedStructure()
     CurrentPreviewYaw =
         0.0f;
 
-    CurrentPlacementResult.Reset();
-
-    CurrentPlacementResult.FailureReason =
+    FSGPlacementResult ClearedResult;
+    ClearedResult.Reset();
+    ClearedResult.FailureReason =
         ESGPlacementFailureReason::InvalidDefinition;
+
+    const bool bResultChanged =
+        HasPlacementResultChanged(
+            ClearedResult,
+            CurrentPlacementResult
+        );
+
+    CurrentPlacementResult = ClearedResult;
 
     OnPreviewValidityChanged(
         false,
         ESGPlacementFailureReason::InvalidDefinition
     );
 
-    OnPlacementResultChanged.Broadcast(
-        CurrentPlacementResult
-    );
+    if (bResultChanged)
+    {
+        OnPlacementResultChanged.Broadcast(
+            CurrentPlacementResult
+        );
+    }
 }
 
 void USGConstructionComponent::RotatePreview(
@@ -832,6 +917,19 @@ bool USGConstructionComponent::CheckGroundTrace(
         QueryParams.AddIgnoredActor(
             PreviewActor
         );
+    }
+
+    /*
+     * 중앙 Trace는 설치 지면을 찾는 용도다.
+     * 기존 구조물과의 충돌은 CheckStructureOverlap에서 별도로
+     * 검사하므로, 여기서는 설치된 구조물을 무시한다.
+     */
+    for (const TObjectPtr<AActor>& StructurePtr : PlacedStructures)
+    {
+        if (IsValid(StructurePtr.Get()))
+        {
+            QueryParams.AddIgnoredActor(StructurePtr.Get());
+        }
     }
 
     return World->LineTraceSingleByChannel(
@@ -1008,24 +1106,6 @@ bool USGConstructionComponent::CheckStructureOverlap(
             continue;
         }
 
-        UE_LOG(
-            LogTemp,
-            Warning,
-            TEXT(
-                "Structure overlap detected. "
-                "SelectedRow=%s "
-                "Actor=%s "
-                "Component=%s "
-                "CheckLocation=%s "
-                "CheckExtent=%s"
-            ),
-            *SelectedStructureRow.ToString(),
-            *GetNameSafe(OverlappedActor),
-            *GetNameSafe(OverlappedComponent),
-            *CheckLocation.ToString(),
-            *CheckExtent.ToString()
-        );
-
         return false;
     }
 
@@ -1147,10 +1227,36 @@ HandlePlacedStructureDestroyed(
         return;
     }
 
+    const FName DestroyedStructureRow =
+        PlacedStructureRows.FindRef(DestroyedActor);
+
     PlacedStructures.Remove(DestroyedActor);
     PlacedStructureRows.Remove(DestroyedActor);
 
-    RecalculateOwnedPowerGrids();
+    /*
+     * 파워코어가 파괴되면 다른 구조물 선택을 유지하지 않고
+     * 코어로 돌아간다. 이후 2~5번 선택은 다시 잠긴다.
+     */
+    if (DestroyedStructureRow == PowerCoreStructureRowName
+        && !HasOperationalPowerCore())
+    {
+        DisableAllOwnedNonCoreStructures();
+
+        if (SelectedStructureRow != PowerCoreStructureRowName)
+        {
+            SelectStructureByRowName(
+                PowerCoreStructureRowName
+            );
+        }
+    }
+    else
+    {
+        /*
+         * 남은 코어가 있거나 전력 소비 구조물이 파괴된 경우
+         * 반환된 전력까지 포함해 전체 전력망을 다시 분배한다.
+         */
+        RecalculateOwnedPowerGrids();
+    }
 
     if (IsBuildModeActive())
     {
@@ -1215,6 +1321,44 @@ void USGConstructionComponent::GetOwnedPowerCores(
     }
 }
 
+bool USGConstructionComponent::HasOperationalPowerCore() const
+{
+    TArray<APowerCore*> PowerCores;
+    GetOwnedPowerCores(PowerCores);
+
+    for (const APowerCore* PowerCore : PowerCores)
+    {
+        if (IsValid(PowerCore)
+            && !PowerCore->IsDestroyed()
+            && PowerCore->CanOperate())
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+void USGConstructionComponent::
+DisableAllOwnedNonCoreStructures() const
+{
+    for (const TObjectPtr<AActor>& StructurePtr :
+        PlacedStructures)
+    {
+        AStructureBase* Structure =
+            Cast<AStructureBase>(StructurePtr.Get());
+
+        if (!IsValid(Structure)
+            || Structure->IsDestroyed()
+            || Cast<APowerCore>(Structure))
+        {
+            continue;
+        }
+
+        Structure->SetPowered(false);
+    }
+}
+
 APowerCore* USGConstructionComponent::
 FindPowerCoreForPlacement(
     const FVector& PlacementLocation,
@@ -1266,18 +1410,20 @@ USGConstructionComponent::GetPowerFailureReason(
     const FVector& PlacementLocation
 ) const
 {
+    /*
+     * 모든 비코어 구조물에 적용되는 최상위 선행조건.
+     * CheckPowerRequirement를 직접 호출해도 동일하게 차단된다.
+     */
+    if (SelectedStructureRow != PowerCoreStructureRowName
+        && !HasOperationalPowerCore())
+    {
+        return ESGPlacementFailureReason::MissingPowerCore;
+    }
+
     if (!bSelectedRequiresPowerCore
         && !bSelectedRequiresPower)
     {
         return ESGPlacementFailureReason::None;
-    }
-
-    TArray<APowerCore*> PowerCores;
-    GetOwnedPowerCores(PowerCores);
-
-    if (PowerCores.IsEmpty())
-    {
-        return ESGPlacementFailureReason::MissingPowerCore;
     }
 
     /*
@@ -1309,21 +1455,22 @@ RecalculateOwnedPowerGrids() const
     TArray<APowerCore*> PowerCores;
     GetOwnedPowerCores(PowerCores);
 
-    /**
-     * APowerCore::RecalculatePowerGrid()가
-     * 같은 소유자의 전체 전력망을 한 번에 계산하므로
-     * 유효한 코어 하나에서만 호출한다.
+    /*
+     * RecalculatePowerGrid() 한 번이 같은 Owner의 모든 코어를
+     * 함께 계산하므로, 코어마다 중복 호출하지 않는다.
      */
     for (APowerCore* PowerCore : PowerCores)
     {
-        if (!IsValid(PowerCore))
+        if (IsValid(PowerCore)
+            && !PowerCore->IsDestroyed()
+            && PowerCore->CanOperate())
         {
-            continue;
+            PowerCore->RecalculatePowerGrid();
+            return;
         }
-
-        PowerCore->RecalculatePowerGrid();
-        break;
     }
+
+    DisableAllOwnedNonCoreStructures();
 }
 
 bool USGConstructionComponent::
@@ -1331,9 +1478,12 @@ CheckPowerRequirement_Implementation(
     const FVector& PlacementLocation
 ) const
 {
-    return GetPowerFailureReason(
-        PlacementLocation
-    ) == ESGPlacementFailureReason::None;
+    /*
+     * 기본 전력 판정은 CalculatePlacementResult에서 한 번만 수행한다.
+     * 이 이벤트는 Blueprint가 추가 규칙을 확장할 때만 사용한다.
+     */
+    (void)PlacementLocation;
+    return true;
 }
 
 bool USGConstructionComponent::CalculatePlacementResult(
@@ -1355,10 +1505,6 @@ bool USGConstructionComponent::CalculatePlacementResult(
 
     // ─────────────────────────────────────────────
     // 2. 카메라 기반 중앙 표면 Trace
-    //
-    // 설치 개수 제한보다 먼저 위치를 계산한다.
-    // 그래야 설치 제한에 걸려도 프리뷰가
-    // 월드 원점으로 초기화되지 않는다.
 
     FHitResult GroundHit;
 
@@ -1377,10 +1523,6 @@ bool USGConstructionComponent::CalculatePlacementResult(
 
     // ─────────────────────────────────────────────
     // 3. 설치 Transform 계산
-    //
-    // Trace가 성공했다면 이후 검사 결과와 관계없이
-    // 프리뷰가 현재 바라보는 위치를 유지할 수 있도록
-    // Transform부터 먼저 저장한다.
 
     const FVector PlacementLocation =
         GroundHit.ImpactPoint
@@ -1402,8 +1544,21 @@ bool USGConstructionComponent::CalculatePlacementResult(
             FVector::OneVector
         );
 
+    OutResult.bHasValidTransform = true;
+
     // ─────────────────────────────────────────────
-    // 4. 설치 가능한 표면인지 검사
+    // 4. 설치 개수 제한
+
+    if (!CheckStructureLimit())
+    {
+        OutResult.FailureReason =
+            ESGPlacementFailureReason::StructureLimit;
+
+        return false;
+    }
+
+    // ─────────────────────────────────────────────
+    // 5. 설치 가능한 표면인지 검사
 
     if (!IsValidGroundSurface(
         GroundHit
@@ -1411,20 +1566,6 @@ bool USGConstructionComponent::CalculatePlacementResult(
     {
         OutResult.FailureReason =
             ESGPlacementFailureReason::InvalidSurface;
-
-        return false;
-    }
-
-    // ─────────────────────────────────────────────
-    // 5. 설치 개수 제한
-    //
-    // 위치 계산 뒤에 검사하므로 제한에 걸려도
-    // 프리뷰는 현재 조준 위치에 남는다.
-
-    if (!CheckStructureLimit())
-    {
-        OutResult.FailureReason =
-            ESGPlacementFailureReason::StructureLimit;
 
         return false;
     }
@@ -1499,15 +1640,13 @@ bool USGConstructionComponent::CalculatePlacementResult(
     }
 
     /*
-     * Blueprint에서 추가 전력 규칙을 확장할 수 있다.
+     * 기본 C++ 전력 검사를 반복하지 않고 Blueprint 추가 규칙만
+     * 한 번 호출한다. 기본 구현은 true다.
      */
-    if (!CheckPowerRequirement(
-        PlacementLocation
-    ))
+    if (!CheckPowerRequirement(PlacementLocation))
     {
         OutResult.FailureReason =
-            ESGPlacementFailureReason::
-                InsufficientPower;
+            ESGPlacementFailureReason::InsufficientPower;
 
         return false;
     }
@@ -1515,8 +1654,7 @@ bool USGConstructionComponent::CalculatePlacementResult(
     // ─────────────────────────────────────────────
     // 11. 설치 가능
 
-    OutResult.bCanPlace =
-        true;
+    OutResult.bCanPlace = true;
 
     OutResult.FailureReason =
         ESGPlacementFailureReason::None;
@@ -1544,20 +1682,26 @@ void USGConstructionComponent::UpdatePlacementPreview()
         NewResult.FailureReason
             != CurrentPlacementResult.FailureReason;
 
+    const bool bResultChanged =
+        HasPlacementResultChanged(
+            NewResult,
+            CurrentPlacementResult
+        );
+
     CurrentPlacementResult =
         NewResult;
 
     /*
-     * 실제로 지면 Trace에 성공한 경우에만
-     * 새 Transform을 프리뷰에 적용한다.
-     *
-     * Trace 이전 검사에서 실패하거나
-     * 표면을 찾지 못했다면 기본 Identity Transform을
-     * 적용하지 않고 기존 프리뷰 위치를 유지한다.
+     * Trace로 계산된 Transform만 적용한다.
+     * 실패 결과의 Identity Transform이 월드 원점으로 프리뷰를
+     * 이동시키는 현상을 방지한다.
      */
     if (IsValid(PreviewActor)
-        &&
-        CurrentPlacementResult.GroundHit.bBlockingHit)
+        && CurrentPlacementResult.bHasValidTransform
+        && !PreviewActor->GetActorTransform().Equals(
+            CurrentPlacementResult.PlacementTransform,
+            0.1f
+        ))
     {
         PreviewActor->SetActorTransform(
             CurrentPlacementResult.PlacementTransform
@@ -1572,9 +1716,12 @@ void USGConstructionComponent::UpdatePlacementPreview()
         );
     }
 
-    OnPlacementResultChanged.Broadcast(
-        CurrentPlacementResult
-    );
+    if (bResultChanged)
+    {
+        OnPlacementResultChanged.Broadcast(
+            CurrentPlacementResult
+        );
+    }
 }
 
 void USGConstructionComponent::SpawnPreviewActor()
@@ -1700,6 +1847,20 @@ void USGConstructionComponent::ConfigurePreviewActor(
         return;
     }
 
+    TArray<UActorComponent*> ActorComponents;
+
+    InPreviewActor->GetComponents<UActorComponent>(
+        ActorComponents
+    );
+
+    for (UActorComponent* ActorComponent : ActorComponents)
+    {
+        if (IsValid(ActorComponent))
+        {
+            ActorComponent->SetComponentTickEnabled(false);
+        }
+    }
+
     TArray<UPrimitiveComponent*> PrimitiveComponents;
 
     InPreviewActor->GetComponents<UPrimitiveComponent>(
@@ -1725,7 +1886,11 @@ void USGConstructionComponent::ConfigurePreviewActor(
         Primitive->SetCanEverAffectNavigation(
             false
         );
+
+        Primitive->SetComponentTickEnabled(false);
     }
+
+    InPreviewActor->SetActorTickEnabled(false);
 }
 void USGConstructionComponent::SetPreviewActorActive(
     AActor* InPreviewActor,
@@ -1750,11 +1915,10 @@ void USGConstructionComponent::SetPreviewActorActive(
     );
 
     /*
-     * 숨겨진 프리뷰 Actor의 Tick을 중지한다.
+     * 프리뷰 위치는 ConstructionComponent가 갱신한다.
+     * 활성 프리뷰도 자체 Actor Tick을 사용하지 않는다.
      */
-    InPreviewActor->SetActorTickEnabled(
-        bActive
-    );
+    InPreviewActor->SetActorTickEnabled(false);
 }
 
 void USGConstructionComponent::DestroyAllPreviewActors()
@@ -1794,6 +1958,12 @@ bool USGConstructionComponent::TryPlaceSelectedStructure()
         PlacementResult
     ))
     {
+        const bool bResultChanged =
+            HasPlacementResultChanged(
+                PlacementResult,
+                CurrentPlacementResult
+            );
+
         CurrentPlacementResult =
             PlacementResult;
 
@@ -1802,13 +1972,16 @@ bool USGConstructionComponent::TryPlaceSelectedStructure()
             PlacementResult.FailureReason
         );
 
-        OnPlacementResultChanged.Broadcast(
-            CurrentPlacementResult
-        );
+        if (bResultChanged)
+        {
+            OnPlacementResultChanged.Broadcast(
+                CurrentPlacementResult
+            );
+        }
 
         UE_LOG(
             LogTemp,
-            Warning,
+            Verbose,
             TEXT(
                 "Structure placement failed. "
                 "Row=%s FailureReason=%d"
@@ -1929,10 +2102,30 @@ bool USGConstructionComponent::TryPlaceSelectedStructure()
     );
 
     /*
+     * 모든 비코어 구조물은 코어에 종속된다.
+     * 전력을 소비하지 않는 구조물도 코어가 있어야 Active가 된다.
+     */
+    if (AStructureBase* Structure =
+        Cast<AStructureBase>(SpawnedStructure))
+    {
+        if (SelectedStructureRow != PowerCoreStructureRowName
+            && !bSelectedRequiresPower)
+        {
+            Structure->SetPowered(
+                HasOperationalPowerCore()
+            );
+        }
+    }
+
+    /*
      * 파워코어 또는 전력 소비 구조물이 새로 생겼으므로
      * 같은 소유자의 전력망을 즉시 다시 계산한다.
      */
-    RecalculateOwnedPowerGrids();
+    if (SelectedStructureRow == PowerCoreStructureRowName
+        || bSelectedRequiresPower)
+    {
+        RecalculateOwnedPowerGrids();
+    }
 
     OnStructurePlaced.Broadcast(
         SpawnedStructure
@@ -1940,7 +2133,7 @@ bool USGConstructionComponent::TryPlaceSelectedStructure()
 
     UE_LOG(
         LogTemp,
-        Log,
+        Verbose,
         TEXT(
             "Structure placed: %s"
         ),
@@ -2272,7 +2465,7 @@ void USGConstructionComponent::CreatePlacementBoundsForStructure(
 
     UE_LOG(
         LogTemp,
-        Log,
+        VeryVerbose,
         TEXT(
             "Placement bounds created. "
             "Actor=%s Extent=%s RelativeLocation=%s"

@@ -10,6 +10,7 @@
 
 class AActor;
 class APowerCore;
+class AStructureBase;
 class UCameraComponent;
 class UDataTable;
 class USGResourceInventoryComponent;
@@ -196,6 +197,12 @@ public:
     UFUNCTION(BlueprintPure, Category = "Construction|Limit")
     int32 GetSelectedStructureRemainingCount() const;
 
+    /**
+     * 현재 플레이어가 설치한 작동 가능한 파워코어가 있는지 확인한다.
+     */
+    UFUNCTION(BlueprintPure, Category = "Construction|Power")
+    bool HasOperationalPowerCore() const;
+
 protected:
     // ─────────────────────────────────────────────
     // 전력 판정
@@ -271,6 +278,17 @@ protected:
     FName DefaultStructureRowName =
         TEXT("PowerCore");
 
+    /**
+     * 이 Row만 파워코어 설치 전에 선택할 수 있다.
+     */
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Construction|Data"
+    )
+    FName PowerCoreStructureRowName =
+        TEXT("PowerCore");
+
     UPROPERTY(
         EditDefaultsOnly,
         BlueprintReadOnly,
@@ -292,6 +310,23 @@ protected:
         )
     )
     float PlacementDistance = 600.0f;
+
+    /**
+     * 프리뷰 전체 판정 주기.
+     * 기본 30Hz로 Trace/Overlap/Blueprint 갱신 비용을 제한한다.
+     * 0이면 매 프레임 갱신한다.
+     */
+    UPROPERTY(
+        EditAnywhere,
+        BlueprintReadOnly,
+        Category = "Construction|Preview",
+        meta = (
+            ClampMin = "0.0",
+            ClampMax = "0.1",
+            Units = "s"
+        )
+    )
+    float PreviewUpdateInterval = 0.033333f;
 
     /**
      * 카메라 설치 Trace 및 지지 검사에 사용하는 채널.
@@ -422,6 +457,11 @@ private:
      * 마지막으로 ToggleBuildMode가 정상 처리된 시간.
      */
     float LastBuildModeToggleTime = -1.0f;
+
+    /**
+     * 30Hz 프리뷰 판정을 위한 누적 시간.
+     */
+    float PreviewUpdateAccumulator = 0.0f;
 
 private:
     // ─────────────────────────────────────────────
@@ -660,6 +700,13 @@ private:
     void GetOwnedPowerCores(
         TArray<APowerCore*>& OutPowerCores
     ) const;
+
+    /**
+     * 작동 가능한 파워코어가 하나도 없을 때
+     * 이 컴포넌트가 설치한 모든 비코어 구조물을
+     * Unpowered 상태로 전환한다.
+     */
+    void DisableAllOwnedNonCoreStructures() const;
 
     APowerCore* FindPowerCoreForPlacement(
         const FVector& PlacementLocation,

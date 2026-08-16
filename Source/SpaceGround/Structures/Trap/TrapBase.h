@@ -32,6 +32,10 @@ protected:
 		AActor* DamageCauser
 	) override;
 
+	virtual void OnOperatingStateChanged(
+		bool bCanOperate
+	) override;
+
 
 public:
 	UFUNCTION(

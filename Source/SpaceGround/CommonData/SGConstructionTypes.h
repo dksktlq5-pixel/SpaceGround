@@ -78,6 +78,13 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Construction")
 	bool bCanPlace = false;
 
+	/**
+	 * PlacementTransform이 실제 Trace 결과로 계산되었는지 여부.
+	 * false일 때 Identity Transform은 유효한 설치 위치가 아니다.
+	 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Construction")
+	bool bHasValidTransform = false;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Construction")
 	ESGPlacementFailureReason FailureReason =
 		ESGPlacementFailureReason::NoSurface;
@@ -91,6 +98,7 @@ public:
 	void Reset()
 	{
 		bCanPlace = false;
+		bHasValidTransform = false;
 		FailureReason = ESGPlacementFailureReason::NoSurface;
 		PlacementTransform = FTransform::Identity;
 		GroundHit = FHitResult();

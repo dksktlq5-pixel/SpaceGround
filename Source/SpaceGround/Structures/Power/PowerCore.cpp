@@ -38,13 +38,7 @@ void APowerCore::BeginPlay()
 	 * 다음 프레임에 전력망을 계산해
 	 * 모든 구조물이 초기화된 뒤 연결되도록 한다.
 	 */
-	if (UWorld* World = GetWorld())
-	{
-		World->GetTimerManager().SetTimerForNextTick(
-			this,
-			&APowerCore::RecalculatePowerGrid
-		);
-	}
+	RequestPowerGridRecalculation();
 }
 
 
@@ -81,7 +75,7 @@ bool APowerCore::LoadPowerCoreData()
 
 	UE_LOG(
 		LogTemp,
-		Log,
+		Verbose,
 		TEXT(
 			"[PowerCore] 전력 데이터 로드 완료. "
 			"ID=%s Supply=%.1f PU Radius=%.1f"
@@ -92,6 +86,32 @@ bool APowerCore::LoadPowerCoreData()
 	);
 
 	return true;
+}
+
+
+void APowerCore::RequestPowerGridRecalculation()
+{
+	UWorld* World = GetWorld();
+
+	if (!World)
+	{
+		return;
+	}
+
+	FTimerManager& TimerManager = World->GetTimerManager();
+
+	if (TimerManager.IsTimerActive(
+		PowerGridRecalculationTimerHandle
+	))
+	{
+		return;
+	}
+
+	PowerGridRecalculationTimerHandle =
+		TimerManager.SetTimerForNextTick(
+			this,
+			&APowerCore::RecalculatePowerGrid
+		);
 }
 
 
@@ -134,6 +154,12 @@ void APowerCore::RecalculatePowerGrid()
 	{
 		return;
 	}
+
+	/* 직접 재계산되었다면 BeginPlay에서 예약한 중복 호출을 취소한다. */
+	World->GetTimerManager().ClearTimer(
+		PowerGridRecalculationTimerHandle
+	);
+	PowerGridRecalculationTimerHandle.Invalidate();
 
 	/**
 	 * 전력망은 Actor Owner 기준으로 구분한다.
@@ -245,33 +271,24 @@ void APowerCore::RecalculatePowerGrid()
 			continue;
 		}
 
-		const FSGStructureDefinition* Definition =
-			Structure->FindStructureDefinition();
-
-		if (!Definition)
+		if (Structure->GetStructureID().IsNone())
 		{
 			continue;
 		}
 
 		/**
-		 * 전력을 요구하지 않는 구조물은
-		 * 발전기 관리 대상이 아니다.
-		 *
-		 * 바리케이드와 비전력 함정 등이 해당한다.
+		 * 전력을 소비하지 않는 구조물도 코어 존재에는 종속된다.
+		 * 코어가 하나 이상 작동할 때만 활성화한다.
 		 */
-		if (!Definition->PowerData.bRequiresPower)
+		if (!Structure->RequiresCachedPower())
 		{
-			Structure->SetPowered(true);
+			Structure->SetPowered(
+				!OwnedPowerCores.IsEmpty()
+			);
 			continue;
 		}
 
-		/**
-		 * 전력 소비 구조물은 일단 전력을 차단한 뒤
-		 * 아래 분배 과정에서 공급 가능한 구조물만
-		 * 다시 활성화한다.
-		 */
-		Structure->SetPowered(false);
-
+		/* 최종 분배 결과가 나온 뒤에만 전력 상태를 한 번 변경한다. */
 		PowerCandidates.Add(Structure);
 	}
 
@@ -283,9 +300,17 @@ void APowerCore::RecalculatePowerGrid()
 	 */
 	if (OwnedPowerCores.IsEmpty())
 	{
+		for (AStructureBase* Structure : PowerCandidates)
+		{
+			if (IsValid(Structure))
+			{
+				Structure->SetPowered(false);
+			}
+		}
+
 		UE_LOG(
 			LogTemp,
-			Warning,
+			Verbose,
 			TEXT(
 				"[PowerCore] 작동 가능한 파워코어가 없습니다. "
 				"Owner=%s"
@@ -315,27 +340,11 @@ void APowerCore::RecalculatePowerGrid()
 			const AStructureBase& Right
 		)
 		{
-			const FSGStructureDefinition*
-				LeftDefinition =
-					Left.FindStructureDefinition();
-
-			const FSGStructureDefinition*
-				RightDefinition =
-					Right.FindStructureDefinition();
-
 			const int32 LeftPriority =
-				LeftDefinition
-					? LeftDefinition
-						->PowerData
-						.ShutdownPriority
-					: 0;
+				Left.GetCachedShutdownPriority();
 
 			const int32 RightPriority =
-				RightDefinition
-					? RightDefinition
-						->PowerData
-						.ShutdownPriority
-					: 0;
+				Right.GetCachedShutdownPriority();
 
 			return LeftPriority > RightPriority;
 		}
@@ -357,22 +366,8 @@ void APowerCore::RecalculatePowerGrid()
 			continue;
 		}
 
-		const FSGStructureDefinition* Definition =
-			Structure->FindStructureDefinition();
-
-		if (!Definition)
-		{
-			Structure->SetPowered(false);
-			continue;
-		}
-
 		const float Consumption =
-			FMath::Max(
-				0.0f,
-				Definition
-					->PowerData
-					.PowerConsumption
-			);
+			Structure->GetCachedPowerConsumption();
 
 		APowerCore* BestPowerCore = nullptr;
 		float BestRemainingPower = -1.0f;
@@ -432,7 +427,7 @@ void APowerCore::RecalculatePowerGrid()
 			{
 				UE_LOG(
 					LogTemp,
-					Warning,
+					Verbose,
 					TEXT(
 						"[PowerCore] 전력 부족. "
 						"Structure=%s Need=%.1f"
@@ -447,7 +442,7 @@ void APowerCore::RecalculatePowerGrid()
 			{
 				UE_LOG(
 					LogTemp,
-					Warning,
+					Verbose,
 					TEXT(
 						"[PowerCore] 전력 범위 밖. "
 						"Structure=%s"
@@ -487,7 +482,7 @@ void APowerCore::RecalculatePowerGrid()
 
 		UE_LOG(
 			LogTemp,
-			Log,
+			VeryVerbose,
 			TEXT(
 				"[PowerCore] 구조물 연결. "
 				"Core=%s Structure=%s "
@@ -514,11 +509,9 @@ void APowerCore::RecalculatePowerGrid()
 			continue;
 		}
 
-		PowerCore->DrawPowerRadiusDebug();
-
 		UE_LOG(
 			LogTemp,
-			Log,
+			Verbose,
 			TEXT(
 				"[PowerCore] 전력망 계산 완료. "
 				"Core=%s Connected=%d "
@@ -566,6 +559,39 @@ void APowerCore::ShutdownPowerGrid()
 }
 
 
+void APowerCore::ShutdownAllOwnedStructures()
+{
+	UWorld* World = GetWorld();
+
+	if (!World)
+	{
+		return;
+	}
+
+	AActor* GridOwner = GetOwner();
+
+	for (
+		TActorIterator<AStructureBase> Iterator(World);
+		Iterator;
+		++Iterator
+	)
+	{
+		AStructureBase* Structure = *Iterator;
+
+		if (!IsValid(Structure)
+			|| Structure == this
+			|| Structure->IsDestroyed()
+			|| Structure->GetOwner() != GridOwner
+			|| Cast<APowerCore>(Structure))
+		{
+			continue;
+		}
+
+		Structure->SetPowered(false);
+	}
+}
+
+
 void APowerCore::HandleConnectedStructureDestroyed(
 	AActor* DestroyedActor
 )
@@ -584,13 +610,7 @@ void APowerCore::HandleConnectedStructureDestroyed(
 	 * Actor의 파괴 처리 도중에 월드 전체를 탐색하지 않고
 	 * 다음 프레임에 안전하게 전력망을 계산한다.
 	 */
-	if (UWorld* World = GetWorld())
-	{
-		World->GetTimerManager().SetTimerForNextTick(
-			this,
-			&APowerCore::RecalculatePowerGrid
-		);
-	}
+	RequestPowerGridRecalculation();
 }
 
 
@@ -652,6 +672,11 @@ void APowerCore::HandleStructureDestroyed(
 	 */
 	ShutdownPowerGrid();
 
+	if (!IsValid(ReplacementPowerCore))
+	{
+		ShutdownAllOwnedStructures();
+	}
+
 	UE_LOG(
 		LogTemp,
 		Warning,
@@ -680,10 +705,7 @@ void APowerCore::HandleStructureDestroyed(
 		IsValid(ReplacementPowerCore)
 	)
 	{
-		World->GetTimerManager().SetTimerForNextTick(
-			ReplacementPowerCore,
-			&APowerCore::RecalculatePowerGrid
-		);
+		ReplacementPowerCore->RequestPowerGridRecalculation();
 	}
 }
 

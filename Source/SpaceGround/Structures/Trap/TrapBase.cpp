@@ -69,10 +69,12 @@ void ATrapBase::BeginPlay()
 
 
 	/*
-	 * 현재 MVP 함정은 발전기 없이 작동한다.
+	 * 현재 초기 전력 상태를 TriggerBox에 즉시 반영한다.
+	 * 이후 코어 파괴/복구 때도 같은 함수가 자동 호출된다.
 	 */
-	SetPowered(true);
-	SetStructureActive(true);
+	OnOperatingStateChanged(
+		CanOperate()
+	);
 
 
 	UE_LOG(
@@ -283,5 +285,30 @@ void ATrapBase::HandleStructureDestroyed(
 
 	Super::HandleStructureDestroyed(
 		DamageCauser
+	);
+}
+
+
+void ATrapBase::OnOperatingStateChanged(
+	bool bCanOperateNow
+)
+{
+	Super::OnOperatingStateChanged(
+		bCanOperateNow
+	);
+
+	if (!IsValid(TriggerBox))
+	{
+		return;
+	}
+
+	TriggerBox->SetGenerateOverlapEvents(
+		bCanOperateNow
+	);
+
+	TriggerBox->SetCollisionEnabled(
+		bCanOperateNow
+			? ECollisionEnabled::QueryOnly
+			: ECollisionEnabled::NoCollision
 	);
 }
