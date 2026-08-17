@@ -3,10 +3,10 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "SGGameStateTypes.generated.h"
+#include "SGGamePhase.generated.h"
 
 UENUM(BlueprintType)
-enum class EGameStateTypes : uint8
+enum class EGamePhase : uint8
 {
 	None,
 	exploration, // 탐사 10분

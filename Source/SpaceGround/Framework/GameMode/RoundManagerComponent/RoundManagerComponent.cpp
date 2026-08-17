@@ -39,31 +39,31 @@ void URoundManagerComponent::EndRound()
 void URoundManagerComponent::BeginExploration()
 {
 	StartRound();
-	OnGameStateTypesChanged.Broadcast(EGameStateTypes::exploration);
+	OnGamePhaseChanged.Broadcast(EGamePhase::exploration);
 
 	GetWorld()->GetTimerManager().SetTimer(
-		GameStateTypesTimerHandle, this, &URoundManagerComponent::BeginPreparation, ExplorationTime, false);
+		GamePhaseTimerHandle, this, &URoundManagerComponent::BeginPreparation, ExplorationTime, false);
 }
 
 void URoundManagerComponent::BeginPreparation()
 {
-	OnGameStateTypesChanged.Broadcast(EGameStateTypes::preparation);
+	OnGamePhaseChanged.Broadcast(EGamePhase::preparation);
 
 	GetWorld()->GetTimerManager().SetTimer(
-		GameStateTypesTimerHandle, this, &URoundManagerComponent::BeginObservation, PreparationTime, false);
+		GamePhaseTimerHandle, this, &URoundManagerComponent::BeginObservation, PreparationTime, false);
 }
 
 void URoundManagerComponent::BeginObservation()
 {
-	OnGameStateTypesChanged.Broadcast(EGameStateTypes::observation);
+	OnGamePhaseChanged.Broadcast(EGamePhase::observation);
 
 	GetWorld()->GetTimerManager().SetTimer(
-		GameStateTypesTimerHandle, this, &URoundManagerComponent::BeginCombat, ObservationTime, false);
+		GamePhaseTimerHandle, this, &URoundManagerComponent::BeginCombat, ObservationTime, false);
 }
 
 void URoundManagerComponent::BeginCombat()
 {
-	OnGameStateTypesChanged.Broadcast(EGameStateTypes::combat);
+	OnGamePhaseChanged.Broadcast(EGamePhase::combat);
 	// 타이머 없음
 }
 

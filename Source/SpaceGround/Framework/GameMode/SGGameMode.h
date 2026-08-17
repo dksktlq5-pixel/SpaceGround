@@ -5,7 +5,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/GameMode.h"
 #include "RoundManagerComponent/RoundManagerComponent.h"
-#include "SpaceGround/CommonData/SGGameStateTypes.h"
+#include "SpaceGround/CommonData/SGGamePhase.h"
 #include "SGGameMode.generated.h"
 
 /**
@@ -34,6 +34,18 @@ private:
 public:
 	void HandleRoundChanged(int32 NewRoundIndex);
 	
-	void HandleGameStateTypesChanged(EGameStateTypes NewGameStateTypes);
+	void HandleGamePhaseChanged(EGamePhase NewGamePhase);
 	
+#pragma region CheckGameResult
+private:
+	bool bIsGameEnded = false;
+	
+	bool IsBossDefeated() const; // 아직 없는 시스템에 대한 의존성 격리 목적 + 가독성
+	bool AreAllPlayersDead() const;
+
+public:
+	void CheckGameResult();
+
+	
+#pragma endregion
 };
